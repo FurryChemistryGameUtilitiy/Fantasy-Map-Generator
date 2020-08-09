@@ -544,14 +544,19 @@ function unfog(id) {
 }
 
 function getFileName(dataType) {
+  const formatTime = (time) => {
+    return (time < 10) ? "0" + time : time;
+  };
   const name = mapName.value;
   const type = dataType ? dataType + " " : "";
   const date = new Date();
-  const datFormatter = new Intl.DateTimeFormat("en", {month: "short", day: "numeric"});
-  const timeFormatter = new Intl.DateTimeFormat("ru", {hour: "numeric", minute: "numeric"});
-  const day = datFormatter.format(date).replace(" ", "");
-  const time = timeFormatter.format(date).replace(":", "-");
-  return name + " " + type + day + " " + time;
+  const year = date.getFullYear();
+  const month = formatTime(date.getMonth());
+  const day = formatTime(date.getDay());
+  const hour = formatTime(date.getHours());
+  const minutes = formatTime(date.getMinutes());
+  const dateString = [year, month, day, hour, minutes].join('-');
+  return name + " " + type + dateString;
 }
 
 function downloadFile(data, name, type = "text/plain") {
