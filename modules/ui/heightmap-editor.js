@@ -164,11 +164,12 @@ function editHeightmap() {
   }
 
   function regenerateErasedData() {
-    console.group("Edit Heightmap");
-    console.time("regenerateErasedData");
+    INFO && console.group("Edit Heightmap");
+    TIME && console.time("regenerateErasedData");
 
     const change = changeHeights.checked;
     markFeatures();
+    getSignedDistanceField();
     if (change) openNearSeaLakes();
     OceanLayers();
     calculateTemperatures();
@@ -176,7 +177,6 @@ function editHeightmap() {
     reGraph();
     drawCoastline();
 
-    elevateLakes();
     Rivers.generate(change);
 
     if (!change) {
@@ -186,6 +186,7 @@ function editHeightmap() {
       }
     }
 
+    Lakes.defineGroup();
     defineBiomes();
     rankCells();
     Cultures.generate();
@@ -201,11 +202,13 @@ function editHeightmap() {
     BurgsAndStates.drawStateLabels();
 
     Rivers.specify();
+    Lakes.generateName();
+
     Military.generate();
     addMarkers();
     addZones();
-    console.timeEnd("regenerateErasedData");
-    console.groupEnd("Edit Heightmap");
+    TIME && console.timeEnd("regenerateErasedData");
+    INFO && console.groupEnd("Edit Heightmap");
   }
 
   function restoreKeptData() {
@@ -216,8 +219,8 @@ function editHeightmap() {
   }
 
   function restoreRiskedData() {
-    console.group("Edit Heightmap");
-    console.time("restoreRiskedData");
+    INFO && console.group("Edit Heightmap");
+    TIME && console.time("restoreRiskedData");
 
     // assign pack data to grid cells
     const l = grid.cells.i.length;
@@ -282,16 +285,14 @@ function editHeightmap() {
     });
 
     markFeatures();
+    getSignedDistanceField();
     OceanLayers();
     calculateTemperatures();
     generatePrecipitation();
     reGraph();
     drawCoastline();
 
-    if (changeHeights.checked) {
-      elevateLakes();
-      Rivers.generate(changeHeights.checked);
-    }
+    if (changeHeights.checked) Rivers.generate(changeHeights.checked);
 
     // assign saved pack data from grid back to pack
     const n = pack.cells.i.length;
@@ -314,7 +315,6 @@ function editHeightmap() {
 
     for (const i of pack.cells.i) {
       const g = pack.cells.g[i];
-      if (pack.features[pack.cells.f[i]].group === "freshwater") pack.cells.h[i] = 19; // de-elevate lakes
       const land = pack.cells.h[i] >= 20;
 
       // check biome
@@ -353,7 +353,6 @@ function editHeightmap() {
       if (!b.i || b.removed) continue;
       b.cell = findBurgCell(b.x, b.y);
       b.feature = pack.cells.f[b.cell];
-      //if (b.port) b.port = pack.cells.f[pack.cells.haven[b.cell]]; // water body id
 
       pack.cells.burg[b.cell] = b.i;
       if (!b.capital && pack.cells.h[b.cell] < 20) removeBurg(b.i);
@@ -385,7 +384,10 @@ function editHeightmap() {
     drawStates();
     drawBorders();
 
-    if (changeHeights.checked) Rivers.specify();
+    if (changeHeights.checked) {
+      Rivers.specify();
+      Lakes.generateName();
+    }
 
     // restore zones from grid
     zones.selectAll("g").each(function() {
@@ -401,8 +403,8 @@ function editHeightmap() {
         .attr("points", d => getPackPolygon(d)).attr("id", d => base + d);
     });
 
-    console.timeEnd("restoreRiskedData");
-    console.groupEnd("Edit Heightmap");
+    TIME && console.timeEnd("restoreRiskedData");
+    INFO && console.groupEnd("Edit Heightmap");
   }
 
   // trigger heightmap redraw and history update if at least 1 cell is changed
@@ -954,7 +956,7 @@ function editHeightmap() {
       templateBody.innerHTML = "";
       for (const s of steps) {
         const step = s.split(" ");
-        if (step.length !== 5) {console.error("Cannot parse step, wrong arguments count", s); continue;}
+        if (step.length !== 5) {ERROR && console.error("Cannot parse step, wrong arguments count", s); continue;}
         addStep(step[0], step[1], step[2], step[3], step[4]);
       }
 
@@ -1311,7 +1313,6 @@ function editHeightmap() {
       const link = document.createElement("a");
       link.download = getFileName("Heightmap") + ".png";
       link.href = imgBig;
-      document.body.appendChild(link);
       link.click();
       canvas.remove();
     }

@@ -2,10 +2,10 @@ function editWorld() {
   if (customization) return;
   $("#worldConfigurator").dialog({title: "Configure World", resizable: false, width: "42em",
     buttons: {
-      "Whole World": () => applyPreset(100, 50), 
-      "Northern": () => applyPreset(33, 25), 
-      "Tropical": () => applyPreset(33, 50), 
-      "Southern": () => applyPreset(33, 75), 
+      "Whole World": () => applyWorldPreset(100, 50),
+      "Northern": () => applyWorldPreset(33, 25),
+      "Tropical": () => applyWorldPreset(33, 50),
+      "Southern": () => applyWorldPreset(33, 75),
       "Restore Winds": restoreDefaultWinds
     }, open: function() {
       const buttons = $(this).dialog("widget").find(".ui-dialog-buttonset > button");
@@ -19,7 +19,7 @@ function editWorld() {
 
   const globe = d3.select("#globe");
   const clr = d3.scaleSequential(d3.interpolateSpectral);
-  const tMax = +temperatureEquatorOutput.max, tMin = +temperatureEquatorOutput.min; // temperature extremes
+  const tMax = 30, tMin = -25; // temperature extremes
   const projection = d3.geoOrthographic().translate([100, 100]).scale(100);
   const path = d3.geoPath(projection);
 
@@ -45,9 +45,9 @@ function editWorld() {
     updateGlobePosition();
     calculateTemperatures();
     generatePrecipitation();
-    elevateLakes();
     const heights = new Uint8Array(pack.cells.h);
     Rivers.generate();
+    Lakes.defineGroup();
     Rivers.specify();
     pack.cells.h = new Float32Array(heights);
     defineBiomes();
@@ -125,7 +125,7 @@ function editWorld() {
     if (update) updateWorld();
   }
 
-  function applyPreset(size, lat) {
+  function applyWorldPreset(size, lat) {
     document.getElementById("mapSizeInput").value = document.getElementById("mapSizeOutput").value = size;
     document.getElementById("latitudeInput").value = document.getElementById("latitudeOutput").value = lat;
     lock("mapSize");

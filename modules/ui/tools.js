@@ -14,6 +14,7 @@ toolsContent.addEventListener("click", function(event) {
   if (button === "editDiplomacyButton") editDiplomacy(); else
   if (button === "editCulturesButton") editCultures(); else
   if (button === "editReligions") editReligions(); else
+  if (button === "editEmblemButton") openEmblemEditor(); else
   if (button === "editNamesBaseButton") editNamesbase(); else
   if (button === "editUnitsButton") editUnits(); else
   if (button === "editNotesButton") editNotes(); else
@@ -60,9 +61,10 @@ function processFeatureRegeneration(event, button) {
   if (button === "regenerateRoutes") {Routes.regenerate(); if (!layerIsOn("toggleRoutes")) toggleRoutes();} else
   if (button === "regenerateRivers") regenerateRivers(); else
   if (button === "regeneratePopulation") recalculatePopulation(); else
-  if (button === "regenerateBurgs") regenerateBurgs(); else
   if (button === "regenerateStates") regenerateStates(); else
   if (button === "regenerateProvinces") regenerateProvinces(); else
+  if (button === "regenerateBurgs") regenerateBurgs(); else
+  if (button === "regenerateEmblems") regenerateEmblems(); else
   if (button === "regenerateReligions") regenerateReligions(); else
   if (button === "regenerateCultures") regenerateCultures(); else
   if (button === "regenerateMilitary") regenerateMilitary(); else
@@ -71,13 +73,29 @@ function processFeatureRegeneration(event, button) {
   if (button === "regenerateZones") regenerateZones(event);
 }
 
-function regenerateRivers() {
-  elevateLakes();
-  Rivers.generate();
-  for (const i of pack.cells.i) {
-    const f = pack.features[pack.cells.f[i]]; // feature
-    if (f.group === "freshwater") pack.cells.h[i] = 19; // de-elevate lakes
+async function openEmblemEditor() {
+  let type, id, el;
+
+  if (pack.states[1]?.coa) {
+    type = "state";
+    id = "stateCOA1";
+    el = pack.states[1];
+  } else if (pack.burgs[1]?.coa) {
+    type = "burg";
+    id = "burgCOA1";
+    el = pack.burgs[1];
+  } else {
+    tip("No emblems to edit, please generate states and burgs first", false, "error");
+    return;
   }
+
+  await COArenderer.trigger(id, el.coa);
+  editEmblem(type, id, el);
+}
+
+function regenerateRivers() {
+  Rivers.generate();
+  Lakes.defineGroup();
   Rivers.specify();
   if (!layerIsOn("toggleRivers")) toggleRivers();
 }
@@ -85,7 +103,7 @@ function regenerateRivers() {
 function recalculatePopulation() {
   rankCells();
   pack.burgs.forEach(b => {
-    if (!b.i || b.removed) return;
+    if (!b.i || b.removed || b.lock) return;
     const i = b.cell;
 
     b.population = rn(Math.max((pack.cells.s[i] + pack.cells.road[i] / 2) / 8 + b.i / 1000 + i % 100 / 1000, .1), 3);
@@ -95,61 +113,9 @@ function recalculatePopulation() {
   });
 }
 
-function regenerateBurgs() {
-  const cells = pack.cells, states = pack.states;
-  rankCells();
-  cells.burg = new Uint16Array(cells.i.length);
-  const burgs = pack.burgs = [0]; // clear burgs array
-  states.filter(s => s.i).forEach(s => s.capital = 0); // clear state capitals
-  pack.provinces.filter(p => p.i).forEach(p => p.burg = 0); // clear province capitals
-  const burgsTree = d3.quadtree();
-
-  const score = new Int16Array(cells.s.map(s => s * Math.random())); // cell score for capitals placement
-  const sorted = cells.i.filter(i => score[i] > 0 && cells.culture[i]).sort((a, b) => score[b] - score[a]); // filtered and sorted array of indexes
-  const burgsCount = manorsInput.value == 1000 ? rn(sorted.length / 5 / (grid.points.length / 10000) ** .8) + states.length : +manorsInput.value + states.length;
-  const spacing = (graphWidth + graphHeight) / 150 / (burgsCount ** .7 / 66); // base min distance between towns
-
-  for (let i=0; i < sorted.length && burgs.length < burgsCount; i++) {
-    const id = burgs.length;
-    const cell = sorted[i];
-    const x = cells.p[cell][0], y = cells.p[cell][1];
-
-    const s = spacing * gauss(1, .3, .2, 2, 2); // randomize to make the placement not uniform
-    if (burgsTree.find(x, y, s) !== undefined) continue; // to close to existing burg
-
-    const state = cells.state[cell];
-    const capital = state && !states[state].capital; // if state doesn't have capital, make this burg a capital, no capital for neutral lands
-    if (capital) {states[state].capital = id; states[state].center = cell;}
-
-    const culture = cells.culture[cell];
-    const name = Names.getCulture(culture);
-    burgs.push({cell, x, y, state, i: id, culture, name, capital, feature: cells.f[cell]});
-    burgsTree.add([x, y]);
-    cells.burg[cell] = id;
-  }
-
-  // add a capital at former place for states without added capitals
-  states.filter(s => s.i && !s.removed && !s.capital).forEach(s => {
-    const burg = addBurg([cells.p[s.center][0], cells.p[s.center][1]]); // add new burg
-    s.capital = burg;
-    s.center = pack.burgs[burg].cell;
-    pack.burgs[burg].capital = 1;
-    pack.burgs[burg].state = s.i;
-    moveBurgToGroup(burg, "cities");
-  });
-
-  pack.features.forEach(f => {if (f.port) f.port = 0}); // reset features ports counter
-  BurgsAndStates.specifyBurgs();
-  BurgsAndStates.defineBurgFeatures();
-  BurgsAndStates.drawBurgs();
-  Routes.regenerate();
-
-  if (document.getElementById("burgsOverviewRefresh").offsetParent) burgsOverviewRefresh.click();
-  if (document.getElementById("statesEditorRefresh").offsetParent) statesEditorRefresh.click();
-}
-
 function regenerateStates() {
-  Math.seedrandom(Math.floor(Math.random() * 1e9)); // new random seed
+  const localSeed = Math.floor(Math.random() * 1e9); // new random seed
+  Math.random = aleaPRNG(localSeed);
   const burgs = pack.burgs.filter(b => b.i && !b.removed);
   if (!burgs.length) {
     tip("No burgs to generate states. Please create burgs first", false, "error");
@@ -168,6 +134,11 @@ function regenerateStates() {
     moveBurgToGroup(b.i, "towns");
     b.capital = 0;
   });
+
+  // remove emblems
+  document.querySelectorAll("[id^=stateCOA]").forEach(el => el.remove());
+  document.querySelectorAll("[id^=provinceCOA]").forEach(el => el.remove());
+  emblems.selectAll("use").remove();
 
   unfog();
 
@@ -212,7 +183,12 @@ function regenerateStates() {
     const nomadic = [1, 2, 3, 4].includes(pack.cells.biome[capital.cell]);
     const type = nomadic ? "Nomadic" : pack.cultures[culture].type === "Nomadic" ? "Generic" : pack.cultures[culture].type;
     const expansionism = rn(Math.random() * powerInput.value + 1, 1);
-    return {i, name, type, capital:capital.i, center:capital.cell, culture, expansionism};
+
+    const cultureType = pack.cultures[culture].type;
+    const coa = COA.generate(capital.coa, .3, null, cultureType);
+    coa.shield = capital.coa.shield;
+
+    return {i, name, type, capital:capital.i, center:capital.cell, culture, expansionism, coa};
   });
 
   BurgsAndStates.expandStates();
@@ -227,6 +203,7 @@ function regenerateStates() {
   if (!layerIsOn("toggleBorders")) toggleBorders(); else drawBorders();
   BurgsAndStates.drawStateLabels();
   Military.generate();
+  if (layerIsOn("toggleEmblems")) drawEmblems(); // redrawEmblems
 
   if (document.getElementById("burgsOverviewRefresh").offsetParent) burgsOverviewRefresh.click();
   if (document.getElementById("statesEditorRefresh").offsetParent) statesEditorRefresh.click();
@@ -235,9 +212,138 @@ function regenerateStates() {
 
 function regenerateProvinces() {
   unfog();
+
   BurgsAndStates.generateProvinces(true);
   drawBorders();
   if (layerIsOn("toggleProvinces")) drawProvinces();
+
+  // remove emblems
+  document.querySelectorAll("[id^=provinceCOA]").forEach(el => el.remove());
+  emblems.selectAll("use").remove();
+  if (layerIsOn("toggleEmblems")) drawEmblems();
+}
+
+function regenerateBurgs() {
+  const cells = pack.cells, states = pack.states, Lockedburgs = pack.burgs.filter(b =>b.lock);
+  rankCells();
+  cells.burg = new Uint16Array(cells.i.length);
+  const burgs = pack.burgs = [0]; // clear burgs array
+  states.filter(s => s.i).forEach(s => s.capital = 0); // clear state capitals
+  pack.provinces.filter(p => p.i).forEach(p => p.burg = 0); // clear province capitals
+  const burgsTree = d3.quadtree();
+
+  const score = new Int16Array(cells.s.map(s => s * Math.random())); // cell score for capitals placement
+  const sorted = cells.i.filter(i => score[i] > 0 && cells.culture[i]).sort((a, b) => score[b] - score[a]); // filtered and sorted array of indexes
+  const burgsCount = manorsInput.value == 1000 ? rn(sorted.length / 5 / (grid.points.length / 10000) ** .8) + states.length : +manorsInput.value + states.length;
+  const spacing = (graphWidth + graphHeight) / 150 / (burgsCount ** .7 / 66); // base min distance between towns
+
+  //clear locked list since ids will change
+  //burglock.selectAll("text").remove();
+  for (let j=0; j < Lockedburgs.length; j++) {
+    const id = burgs.length;
+    const oldBurg = Lockedburgs[j];
+    oldBurg.i = id;
+    burgs.push(oldBurg);
+    burgsTree.add([oldBurg.x, oldBurg.y]);
+    cells.burg[oldBurg.cell] = id;
+    if (oldBurg.capital) {states[oldBurg.state].capital = id; states[oldBurg.state].center = oldBurg.cell;}
+    //burglock.append("text").attr("data-id", id);
+  }
+
+  for (let i=0; i < sorted.length && burgs.length < burgsCount; i++) {
+    const id = burgs.length;
+    const cell = sorted[i];
+    const x = cells.p[cell][0], y = cells.p[cell][1];
+
+    const s = spacing * gauss(1, .3, .2, 2, 2); // randomize to make the placement not uniform
+    if (burgsTree.find(x, y, s) !== undefined) continue; // to close to existing burg
+
+    const state = cells.state[cell];
+    const capital = state && !states[state].capital; // if state doesn't have capital, make this burg a capital, no capital for neutral lands
+    if (capital) {states[state].capital = id; states[state].center = cell;}
+
+    const culture = cells.culture[cell];
+    const name = Names.getCulture(culture);
+    burgs.push({cell, x, y, state, i: id, culture, name, capital, feature: cells.f[cell]});
+    burgsTree.add([x, y]);
+    cells.burg[cell] = id;
+  }
+
+  // add a capital at former place for states without added capitals
+  states.filter(s => s.i && !s.removed && !s.capital).forEach(s => {
+    const burg = addBurg([cells.p[s.center][0], cells.p[s.center][1]]); // add new burg
+    s.capital = burg;
+    s.center = pack.burgs[burg].cell;
+    pack.burgs[burg].capital = 1;
+    pack.burgs[burg].state = s.i;
+    moveBurgToGroup(burg, "cities");
+  });
+
+  pack.features.forEach(f => {if (f.port) f.port = 0}); // reset features ports counter
+  BurgsAndStates.specifyBurgs();
+  BurgsAndStates.defineBurgFeatures();
+  BurgsAndStates.drawBurgs();
+  Routes.regenerate();
+
+  // remove emblems
+  document.querySelectorAll("[id^=burgCOA]").forEach(el => el.remove());
+  emblems.selectAll("use").remove();
+  if (layerIsOn("toggleEmblems")) drawEmblems();
+
+  if (document.getElementById("burgsOverviewRefresh").offsetParent) burgsOverviewRefresh.click();
+  if (document.getElementById("statesEditorRefresh").offsetParent) statesEditorRefresh.click();
+}
+
+function regenerateEmblems() {
+  // remove old emblems
+  document.querySelectorAll("[id^=stateCOA]").forEach(el => el.remove());
+  document.querySelectorAll("[id^=provinceCOA]").forEach(el => el.remove());
+  document.querySelectorAll("[id^=burgCOA]").forEach(el => el.remove());
+  emblems.selectAll("use").remove();
+
+  // generate new emblems
+  pack.states.forEach(state => {
+    if (!state.i || state.removed) return;
+    const cultureType = pack.cultures[state.culture].type;
+    state.coa = COA.generate(null, null, null, cultureType);
+    state.coa.shield = COA.getShield(state.culture, null);
+  });
+
+  pack.burgs.forEach(burg => {
+    if (!burg.i || burg.removed) return;
+    const state = pack.states[burg.state];
+
+    let kinship = state ? .25 : 0;
+    if (burg.capital) kinship += .1;
+    else if (burg.port) kinship -= .1;
+    if (state && burg.culture !== state.culture) kinship -= .25;
+    burg.coa = COA.generate(state ? state.coa : null, kinship, null, burg.type);
+    burg.coa.shield = COA.getShield(burg.culture, state ? burg.state : 0);
+  });
+
+  pack.provinces.forEach(province => {
+    if (!province.i || province.removed) return;
+    const parent = province.burg ? pack.burgs[province.burg] : pack.states[province.state];
+
+    let dominion = false;
+    if (!province.burg) {
+      dominion = P(.2);
+      if (province.formName === "Colony") dominion = P(.95); else
+      if (province.formName === "Island") dominion = P(.6); else
+      if (province.formName === "Islands") dominion = P(.5); else
+      if (province.formName === "Territory") dominion = P(.4); else
+      if (province.formName === "Land") dominion = P(.3);
+    }
+
+    const nameByBurg = province.burg && province.name.slice(0, 3) === parent.name.slice(0, 3);
+    const kinship = dominion ? 0 : nameByBurg ? .8 : .4;
+    const culture = pack.cells.culture[province.center];
+    const type = BurgsAndStates.getType(province.center, parent.port);
+    province.coa = COA.generate(parent.coa, kinship, dominion, type);
+    province.coa.shield = COA.getShield(culture, province.state);
+  });
+
+  if (layerIsOn("toggleEmblems")) drawEmblems(); // redrawEmblems
 }
 
 function regenerateReligions() {
@@ -428,26 +534,31 @@ function addRiverOnClick() {
     i = min;
   }
 
-  const points = Rivers.addMeandring(dataRiver, Math.random() * .5 + .1);
-  const width = Math.random() * .5 + .9;
-  const increment = Math.random() * .4 + .8;
-  const [path, length] = Rivers.getPath(points, width, increment);
-  rivers.append("path").attr("d", path).attr("id", "river"+river).attr("data-width", width).attr("data-increment", increment);
+  const points = Rivers.addMeandering(dataRiver, 1, .5);
+  const widthFactor = rn(.8 + Math.random() * .4, 1); // river width modifier [.8, 1.2]
+  const sourceWidth = .1;
+  const [path, length, offset] = Rivers.getPath(points, widthFactor, sourceWidth);
+  rivers.append("path").attr("d", path).attr("id", "river"+river);
 
   // add new river to data or change extended river attributes
   const r = pack.rivers.find(r => r.i === river);
+  const mouth = last(dataRiver).cell;
+  const discharge = cells.fl[mouth]; // in m3/s
+
   if (r) {
     r.source = dataRiver[0].cell;
     r.length = length;
+    r.discharge = discharge;
   } else {
     const parent = dataRiver[0].parent || 0;
-    const basin = Rivers.getBasin(river, parent);
+    const basin = Rivers.getBasin(river);
     const source = dataRiver[0].cell;
-    const mouth = last(dataRiver).cell;
+    const width = rn(offset ** 2, 2); // mounth width in km
     const name = Rivers.getName(mouth);
     const smallLength = pack.rivers.map(r => r.length||0).sort((a,b) => a-b)[Math.ceil(pack.rivers.length * .15)];
     const type = length < smallLength ? rw({"Creek":9, "River":3, "Brook":3, "Stream":1}) : "River";
-    pack.rivers.push({i:river, parent, length, source, mouth, basin, name, type});
+
+    pack.rivers.push({i:river, source, mouth, discharge, length, width, widthFactor, sourceWidth, parent, basin, name, type});
   }
 
   if (d3.event.shiftKey === false) {

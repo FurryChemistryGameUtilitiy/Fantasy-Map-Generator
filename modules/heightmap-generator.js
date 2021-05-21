@@ -7,7 +7,7 @@
   let cells, p;
 
   const generate = function() {
-    console.time('generateHeightmap');
+    TIME && console.time('generateHeightmap');
     cells = grid.cells, p = grid.points;
     cells.h = new Uint8Array(grid.points.length);
 
@@ -25,7 +25,7 @@
       case "Shattered": templateShattered(); break;
     }
 
-    console.timeEnd('generateHeightmap');
+    TIME && console.timeEnd('generateHeightmap');
   }
 
   // parse template step
@@ -186,32 +186,38 @@
   }
 
   function getBlobPower() {
-    switch (+densityInput.value) {
-      case 1: return .98;
-      case 2: return .985;
-      case 3: return .987;
-      case 4: return .9892;
-      case 5: return .9911;
-      case 6: return .9921;
-      case 7: return .9934;
-      case 8: return .9942;
-      case 9: return .9946;
-      case 10: return .995;
+    switch (+pointsInput.dataset.cells) {
+      case 1000: return .93;
+      case 2000: return .95;
+      case 5000: return .96;
+      case 10000: return .98;
+      case 20000: return .985;
+      case 30000: return .987;
+      case 40000: return .9892;
+      case 50000: return .9911;
+      case 60000: return .9921;
+      case 70000: return .9934;
+      case 80000: return .9942;
+      case 90000: return .9946;
+      case 100000: return .995;
     }
   }
 
   function getLinePower() {
-    switch (+densityInput.value) {
-      case 1: return .81;
-      case 2: return .82;
-      case 3: return .83;
-      case 4: return .84;
-      case 5: return .855;
-      case 6: return .87;
-      case 7: return .885;
-      case 8: return .91;
-      case 9: return .92;
-      case 10: return .93;
+    switch (+pointsInput.dataset.cells) {
+      case 1000: return .74;
+      case 2000: return .75;
+      case 5000: return .78;
+      case 10000: return .81;
+      case 20000: return .82;
+      case 30000: return .83;
+      case 40000: return .84;
+      case 50000: return .855;
+      case 60000: return .87;
+      case 70000: return .885;
+      case 80000: return .91;
+      case 90000: return .92;
+      case 100000: return .93;
     }
   }
 
@@ -507,7 +513,7 @@
   }
 
   function getPointInRange(range, length) {
-    if (typeof range !== "string") {console.error("Range should be a string"); return;}
+    if (typeof range !== "string") {ERROR && console.error("Range should be a string"); return;}
     const min = range.split("-")[0]/100 || 0;
     const max = range.split("-")[1]/100 || 100;
     return rand(min * length, max * length);

@@ -1,14 +1,16 @@
-// Fantasy Map Generator main script
-// Azgaar (azgaar.fmg@yandex.by). Minsk, 2017-2019
+// Azgaar (azgaar.fmg@yandex.com). Minsk, 2017-2021. MIT License
 // https://github.com/Azgaar/Fantasy-Map-Generator
-// MIT License
-
-// I don't mind of any help with programming.
-// See also https://github.com/Azgaar/Fantasy-Map-Generator/issues/153
 
 "use strict";
-const version = "1.4"; // generator version
+const version = "1.61"; // generator version
 document.title += " v" + version;
+
+// Switches to disable/enable logging features
+const PRODUCTION = window.location.host;
+const INFO = !PRODUCTION;
+const TIME = !PRODUCTION;
+const WARN = 1;
+const ERROR = 1;
 
 // if map version is not stored, clear localStorage and show a message
 if (rn(localStorage.getItem("version"), 2) !== rn(version, 2)) {
@@ -55,6 +57,7 @@ let coastline = viewbox.append("g").attr("id", "coastline");
 let ice = viewbox.append("g").attr("id", "ice").style("display", "none");
 let prec = viewbox.append("g").attr("id", "prec").style("display", "none");
 let population = viewbox.append("g").attr("id", "population");
+let emblems = viewbox.append("g").attr("id", "emblems").style("display", "none");
 let labels = viewbox.append("g").attr("id", "labels");
 let icons = viewbox.append("g").attr("id", "icons");
 let burgIcons = icons.append("g").attr("id", "burgIcons");
@@ -91,18 +94,24 @@ anchors.append("g").attr("id", "towns");
 population.append("g").attr("id", "rural");
 population.append("g").attr("id", "urban");
 
+// emblem groups
+emblems.append("g").attr("id", "burgEmblems");
+emblems.append("g").attr("id", "provinceEmblems");
+emblems.append("g").attr("id", "stateEmblems");
+
 // fogging
 fogging.append("rect").attr("x", 0).attr("y", 0).attr("width", "100%").attr("height", "100%");
 fogging.append("rect").attr("x", 0).attr("y", 0).attr("width", "100%").attr("height", "100%").attr("fill", "#e8f0f6").attr("filter", "url(#splotch)");
 
 // assign events separately as not a viewbox child
-scaleBar.on("mousemove", () => tip("Click to open Units Editor"));
+scaleBar.on("mousemove", () => tip("Click to open Units Editor")).on("click", () => editUnits());
 legend.on("mousemove", () => tip("Drag to change the position. Click to hide the legend")).on("click", () => clearLegend());
 
 // main data variables
 let grid = {}; // initial grapg based on jittered square grid and data
 let pack = {}; // packed graph and data
 let seed, mapId, mapHistory = [], elSelected, modules = {}, notes = [];
+let rulers = new Rulers();
 let customization = 0; // 0 - no; 1 = heightmap draw; 2 - states draw; 3 - add state/burg; 4 - cultures draw
 
 let biomesData = applyDefaultBiomesSystem();
@@ -142,7 +151,7 @@ void function checkLoadParameters() {
 
   // of there is a valid maplink, try to load .map file from URL
   if (params.get("maplink")) {
-    console.warn("Load map from URL");
+    WARN && console.warn("Load map from URL");
     const maplink = params.get("maplink");
     const pattern = /(ftp|http|https):\/\/(\w+:{0,1}\w*@)?(\S+)(:[0-9]+)?(\/|\/([\w#!:.?+=&%@!\-\/]))?/;
     const valid = pattern.test(maplink);
@@ -152,7 +161,7 @@ void function checkLoadParameters() {
 
   // if there is a seed (user of MFCG provided), generate map for it
   if (params.get("seed")) {
-    console.warn("Generate map for seed");
+    WARN && console.warn("Generate map for seed");
     generateMapOnLoad();
     return;
   }
@@ -161,24 +170,24 @@ void function checkLoadParameters() {
   if (onloadMap.value === "saved") {
     ldb.get("lastMap", blob => {
       if (blob) {
-        console.warn("Load last saved map");
+        WARN && console.warn("Load last saved map");
         try {
           uploadMap(blob);
         }
         catch(error) {
-          console.error(error);
-          console.warn("Cannot load stored map, random map to be generated");
+          ERROR && console.error(error);
+          WARN && console.warn("Cannot load stored map, random map to be generated");
           generateMapOnLoad();
         }
       } else {
-        console.error("No map stored, random map to be generated");
+        ERROR && console.error("No map stored, random map to be generated");
         generateMapOnLoad();
       }
     });
     return;
   }
 
-  console.warn("Generate random map");
+  WARN && console.warn("Generate random map");
   generateMapOnLoad();
 }()
 
@@ -197,7 +206,7 @@ function loadMapFromURL(maplink, random) {
 }
 
 function showUploadErrorMessage(error, URL, random) {
-  console.error(error);
+  ERROR && console.error(error);
   alertMessage.innerHTML = `Cannot load map from the ${link(URL, "link provided")}.
     ${random?`A new random map is generated. `:''}
     Please ensure the linked file is reachable and CORS is allowed on server side`;
@@ -249,7 +258,7 @@ function focusOn() {
 // find burg for MFCG and focus on it
 function findBurgForMFCG(params) {
   const cells = pack.cells, burgs = pack.burgs;
-  if (pack.burgs.length < 2) {console.error("Cannot select a burg for MFCG"); return;}
+  if (pack.burgs.length < 2) {ERROR && console.error("Cannot select a burg for MFCG"); return;}
 
   // used for selection
   const size = +params.get("size");
@@ -274,7 +283,7 @@ function findBurgForMFCG(params) {
   // select a burg with closest population from selection
   const selected = d3.scan(selection, (a, b) => Math.abs(a.population - size) - Math.abs(b.population - size));
   const burgId = selection[selected].i;
-  if (!burgId) {console.error("Cannot select a burg for MFCG"); return;}
+  if (!burgId) {ERROR && console.error("Cannot select a burg for MFCG"); return;}
 
   const b = burgs[burgId];
   const referrer = new URL(document.referrer);
@@ -330,37 +339,34 @@ function applyDefaultBiomesSystem() {
 }
 
 function showWelcomeMessage() {
-  const post = link("https://www.reddit.com/r/FantasyMapGenerator/comments/ft5b41/update_new_version_is_published_into_the_battle_v14/", "Main changes:"); // announcement on Reddit
+  const post = link("https://www.patreon.com/posts/48228540", "Main changes:");
   const changelog = link("https://github.com/Azgaar/Fantasy-Map-Generator/wiki/Changelog", "previous version");
   const reddit = link("https://www.reddit.com/r/FantasyMapGenerator", "Reddit community");
   const discord = link("https://discordapp.com/invite/X7E84HU", "Discord server");
   const patreon = link("https://www.patreon.com/azgaar", "Patreon");
-  const desktop = link("https://github.com/Azgaar/Fantasy-Map-Generator/wiki/Q&A#is-there-a-desktop-version", "desktop application");
 
   alertMessage.innerHTML = `The Fantasy Map Generator is updated up to version <b>${version}</b>.
     This version is compatible with ${changelog}, loaded <i>.map</i> files will be auto-updated.
-
     <ul>${post}
-      <li>Military forces changes (${link("https://github.com/Azgaar/Fantasy-Map-Generator/wiki/Military-Forces", "detailed description")})</li>
-      <li>Battle simulation (${link("https://github.com/Azgaar/Fantasy-Map-Generator/wiki/Battle-Simulator", "detailed description")})</li>
-      <li>Ice layer and Ice editor</li>
-      <li>Route and River Elevation profile (by EvolvedExperiment)</li>
-      <li>Image Converter enhancement</li>
-      <li>Name generator improvement</li>
-      <li>Improved integration with City Generator</li>
-      <li>Fogging restyle</li>
+      <li>River overview and River editor rework</li>
+      <li>River generation code refactored and optimized</li>
+      <li>Rivers discharge (flux) and mouth width calculated</li>
+      <li>Lake editor rework</li>
+      <li>Lake type based on evaporation and river system</li>
+      <li>Lake flux, inlets and outlet tracked properly</li>
+      <li>Lake outlet width depends on flux</li>
+      <li>Lakes now have names</li>
+      <li>Rulers rework (v1.61)</li>
+      <li>New ocean pattern by Kiwiroo (v1.61)</li>
     </ul>
 
-    <p>You can can also download a ${desktop}.</p>
-
     <p>Join our ${discord} and ${reddit} to ask questions, share maps, discuss the Generator and Worlbuilding, report bugs and propose new features.</p>
-
     <span>Thanks for all supporters on ${patreon}!</i></span>`;
 
   $("#alert").dialog(
     {resizable: false, title: "Fantasy Map Generator update", width: "28em",
     buttons: {OK: function() {$(this).dialog("close")}},
-    position: {my: "center", at: "center", of: "svg"},
+    position: {my: "center center-4em", at: "center", of: "svg"},
     close: () => localStorage.setItem("version", version)}
   );
 }
@@ -430,7 +436,18 @@ function invokeActiveZooming() {
       const relative = Math.max(rn((desired + desired / scale) / 2, 2), 1);
       this.getAttribute("font-size", relative);
       const hidden = hideLabels.checked && (relative * scale < 6 || relative * scale > 50);
+      if (hidden) this.classList.add("hidden");
+      else this.classList.remove("hidden");
+    });
+  }
+  
+  // rescale emblems on zoom
+  if (emblems.style("display") !== "none") {
+    emblems.selectAll("g").each(function() {
+      const size = this.getAttribute("font-size") * scale;
+      const hidden = hideEmblems.checked && (size < 25 || size > 300);
       if (hidden) this.classList.add("hidden"); else this.classList.remove("hidden");
+      if (!hidden && window.COArenderer && this.children.length && !this.children[0].getAttribute("href")) renderGroupCOAs(this);
     });
   }
 
@@ -454,11 +471,20 @@ function invokeActiveZooming() {
 
   // rescale rulers to have always the same size
   if (ruler.style("display") !== "none") {
-    const size = rn(1 / scale ** .3 * 2, 1);
-    ruler.selectAll("circle").attr("r", 2 * size).attr("stroke-width", .5 * size);
-    ruler.selectAll("rect").attr("stroke-width", .5 * size);
-    ruler.selectAll("text").attr("font-size", 10 * size);
-    ruler.selectAll("line, path").attr("stroke-width", size);
+    const size = rn(10 / scale ** .3 * 2, 2);
+    ruler.selectAll("text").attr("font-size", size);
+  }
+}
+
+async function renderGroupCOAs(g) {
+  const [group, type] = g.id === "burgEmblems" ? [pack.burgs, "burg"] :
+                        g.id === "provinceEmblems" ? [pack.provinces, "province"] :
+                        [pack.states, "state"];
+  for (let use of g.children) {
+    const i = +use.dataset.i;
+    const id = type+"COA"+i;
+    COArenderer.trigger(id, group[i].coa);
+    use.setAttribute("href", "#"+id);
   }
 }
 
@@ -507,7 +533,7 @@ function generate() {
     const timeStart = performance.now();
     invokeActiveZooming();
     generateSeed();
-    console.group("Generated Map " + seed);
+    INFO && console.group("Generated Map " + seed);
     applyMapSize();
     randomizeOptions();
     placePoints();
@@ -515,6 +541,7 @@ function generate() {
     drawScaleBar();
     HeightmapGenerator.generate();
     markFeatures();
+    getSignedDistanceField();
     openNearSeaLakes();
     OceanLayers();
     defineMapSize();
@@ -524,8 +551,8 @@ function generate() {
     reGraph();
     drawCoastline();
 
-    elevateLakes();
     Rivers.generate();
+    Lakes.defineGroup();
     defineBiomes();
 
     rankCells();
@@ -542,18 +569,19 @@ function generate() {
     BurgsAndStates.drawStateLabels();
 
     Rivers.specify();
+    Lakes.generateName();
 
     Military.generate();
     addMarkers();
     addZones();
     Names.getMapName();
 
-    console.warn(`TOTAL: ${rn((performance.now()-timeStart)/1000,2)}s`);
+    WARN && console.warn(`TOTAL: ${rn((performance.now()-timeStart)/1000,2)}s`);
     showStatistics();
-    console.groupEnd("Generated Map " + seed);
+    INFO && console.groupEnd("Generated Map " + seed);
   }
   catch(error) {
-    console.error(error);
+    ERROR && console.error(error);
     clearMainTip();
 
     alertMessage.innerHTML = `An error is occured on map generation. Please retry.
@@ -581,47 +609,49 @@ function generateSeed() {
   else if (optionsSeed.value && optionsSeed.value != seed) seed = optionsSeed.value;
   else seed = Math.floor(Math.random() * 1e9).toString();
   optionsSeed.value = seed;
-  Math.seedrandom(seed);
+  Math.random = aleaPRNG(seed);
 }
 
 // Place points to calculate Voronoi diagram
 function placePoints() {
-  console.time("placePoints");
-  const cellsDesired = 10000 * densityInput.value; // generate 10k points for each densityInput point
+  TIME && console.time("placePoints");
+
+  const cellsDesired = +pointsInput.dataset.cells;
   const spacing = grid.spacing = rn(Math.sqrt(graphWidth * graphHeight / cellsDesired), 2); // spacing between points before jirrering
   grid.boundary = getBoundaryPoints(graphWidth, graphHeight, spacing);
   grid.points = getJitteredGrid(graphWidth, graphHeight, spacing); // jittered square grid
   grid.cellsX = Math.floor((graphWidth + 0.5 * spacing) / spacing);
   grid.cellsY = Math.floor((graphHeight + 0.5 * spacing) / spacing);
-  console.timeEnd("placePoints");
+  TIME && console.timeEnd("placePoints");
 }
 
 // calculate Delaunay and then Voronoi diagram
 function calculateVoronoi(graph, points) {
-  console.time("calculateDelaunay");
+  TIME && console.time("calculateDelaunay");
   const n = points.length;
   const allPoints = points.concat(grid.boundary);
   const delaunay = Delaunator.from(allPoints);
-  console.timeEnd("calculateDelaunay");
+  TIME && console.timeEnd("calculateDelaunay");
 
-  console.time("calculateVoronoi");
-  const voronoi = Voronoi(delaunay, allPoints, n);
+  TIME && console.time("calculateVoronoi");
+  const voronoi = new Voronoi(delaunay, allPoints, n);
   graph.cells = voronoi.cells;
   graph.cells.i = n < 65535 ? Uint16Array.from(d3.range(n)) : Uint32Array.from(d3.range(n)); // array of indexes
   graph.vertices = voronoi.vertices;
-  console.timeEnd("calculateVoronoi");
+  TIME && console.timeEnd("calculateVoronoi");
 }
 
-// Mark features (ocean, lakes, islands)
+// Mark features (ocean, lakes, islands) and calculate distance field
 function markFeatures() {
-  console.time("markFeatures");
-  Math.seedrandom(seed); // restart Math.random() to get the same result on heightmap edit in Erase mode
+  TIME && console.time("markFeatures");
+  Math.random = aleaPRNG(seed); // get the same result on heightmap edit in Erase mode
+
   const cells = grid.cells, heights = grid.cells.h;
   cells.f = new Uint16Array(cells.i.length); // cell feature number
-  cells.t = new Int8Array(cells.i.length); // cell type: 1 = land coast; -1 = water near coast;
+  cells.t = new Int8Array(cells.i.length); // cell type: 1 = land coast; -1 = water near coast
   grid.features = [0];
 
-  for (let i=1, queue=[0]; queue[0] !== -1; i++) {
+  for (let i = 1, queue = [0]; queue[0] !== -1; i++) {
     cells.f[queue[0]] = i; // feature number
     const land = heights[queue[0]] >= 20;
     let border = false; // true if feature touches map border
@@ -629,16 +659,15 @@ function markFeatures() {
     while (queue.length) {
       const q = queue.pop();
       if (cells.b[q]) border = true;
-      cells.c[q].forEach(function(e) {
-        const eLand = heights[e] >= 20;
-        //if (eLand) cells.t[e] = 2;
-        if (land === eLand && cells.f[e] === 0) {
-          cells.f[e] = i;
-          queue.push(e);
-        }
-        if (land && !eLand) {
+
+      cells.c[q].forEach(c => {
+        const cLand = heights[c] >= 20;
+        if (land === cLand && !cells.f[c]) {
+          cells.f[c] = i;
+          queue.push(c);
+        } else if (land && !cLand) {
           cells.t[q] = 1;
-          cells.t[e] = -1;
+          cells.t[c] = -1;
         }
       });
     }
@@ -648,39 +677,57 @@ function markFeatures() {
     queue[0] = cells.f.findIndex(f => !f); // find unmarked cell
   }
 
-  console.timeEnd("markFeatures");
+  TIME && console.timeEnd("markFeatures");
 }
 
-// How to handle lakes generated near seas? They can be both open or closed.
-// As these lakes are usually get a lot of water inflow, most of them should have brake the treshold and flow to sea via river or strait (see Ancylus Lake).
-// So I will help this process and open these kind of lakes setting a treshold cell heigh below the sea level (=19).
+function getSignedDistanceField() {
+  TIME && console.time("getSignedDistanceField");
+  const cells = grid.cells, pointsN = cells.i.length;
+  markup(-2, -1, -10);
+  markup(2, 1, 0);
+
+  // build signed distance field
+  function markup(start, increment, limit) {
+    for (let t = start, count = Infinity; count > 0 && t > limit; t += increment) {
+      count = 0;
+      const prevT = t - increment;
+      for (let i = 0; i < pointsN; i++) {
+        if (cells.t[i] !== prevT) continue;
+
+        for (const c of cells.c[i]) {
+          if (cells.t[c]) continue;
+          cells.t[c] = t;
+          count++;
+        }
+      }
+    }
+  }
+  TIME && console.timeEnd("getSignedDistanceField");
+}
+
+// near sea lakes usually get a lot of water inflow, most of them should brake treshold and flow out to sea (see Ancylus Lake)
 function openNearSeaLakes() {
   if (templateInput.value === "Atoll") return; // no need for Atolls
   const cells = grid.cells, features = grid.features;
   if (!features.find(f => f.type === "lake")) return; // no lakes
-  console.time("openLakes");
-  const limit = 50; // max height that can be breached by water
+  TIME && console.time("openLakes");
+  const LIMIT = 22; // max height that can be breached by water
 
-  for (let t = 0, removed = true; t < 5 && removed; t++) {
-    removed = false;
+  for (const i of cells.i) {
+    const lake = cells.f[i];
+    if (features[lake].type !== "lake") continue; // not a lake cell
 
-    for (const i of cells.i) {
-      const lake = cells.f[i];
-      if (features[lake].type !== "lake") continue; // not a lake cell
+    check_neighbours:
+    for (const c of cells.c[i]) {
+      if (cells.t[c] !== 1 || cells.h[c] > LIMIT) continue; // water cannot brake this
 
-      check_neighbours:
-      for (const c of cells.c[i]) {
-        if (cells.t[c] !== 1 || cells.h[c] > limit) continue; // water cannot brake this
-
-        for (const n of cells.c[c]) {
-          const ocean = cells.f[n];
-          if (features[ocean].type !== "ocean") continue; // not an ocean
-          removed = removeLake(c, lake, ocean);
-          break check_neighbours;
-        }
+      for (const n of cells.c[c]) {
+        const ocean = cells.f[n];
+        if (features[ocean].type !== "ocean") continue; // not an ocean
+        removeLake(c, lake, ocean);
+        break check_neighbours;
       }
     }
-
   }
 
   function removeLake(treshold, lake, ocean) {
@@ -691,10 +738,9 @@ function openNearSeaLakes() {
       if (cells.h[c] >= 20) cells.t[c] = 1; // mark as coastline
     });
     features[lake].type = "ocean"; // mark former lake as ocean
-    return true;
   }
 
-  console.timeEnd("openLakes");
+  TIME && console.timeEnd("openLakes");
 }
 
 // define map size and position based on template and random factor
@@ -707,8 +753,8 @@ function defineMapSize() {
   function getSizeAndLatitude() {
     const template = document.getElementById("templateInput").value; // heightmap template
     const part = grid.features.some(f => f.land && f.border); // if land goes over map borders
-    const max = part ? 85 : 100; // max size
-    const lat = part ? gauss(P(.5) ? 30 : 70, 15, 20, 80) : gauss(50, 20, 15, 85); // latiture shift
+    const max = part ? 80 : 100; // max size
+    const lat = () => gauss(P(.5) ? 40 : 60, 15, 25, 75); // latiture shift
 
     if (!part) {
       if (template === "Pangea") return [100, 50];
@@ -719,14 +765,14 @@ function defineMapSize() {
       if (template === "Low Island" && P(.1)) return [100, 50];
     }
 
-    if (template === "Pangea") return [gauss(75, 20, 30, max), lat];
-    if (template === "Volcano") return [gauss(30, 20, 10, max), lat];
-    if (template === "Mediterranean") return [gauss(30, 30, 15, 80), lat];
-    if (template === "Peninsula") return [gauss(15, 15, 5, 80), lat];
-    if (template === "Isthmus") return [gauss(20, 20, 3, 80), lat];
-    if (template === "Atoll") return [gauss(10, 10, 2, max), lat];
+    if (template === "Pangea") return [gauss(70, 20, 30, max), lat()];
+    if (template === "Volcano") return [gauss(20, 20, 10, max), lat()];
+    if (template === "Mediterranean") return [gauss(25, 30, 15, 80), lat()];
+    if (template === "Peninsula") return [gauss(15, 15, 5, 80), lat()];
+    if (template === "Isthmus") return [gauss(15, 20, 3, 80), lat()];
+    if (template === "Atoll") return [gauss(5, 10, 2, max), lat()];
 
-    return [gauss(40, 20, 15, max), lat]; // Continents, Archipelago, High Island, Low Island
+    return [gauss(30, 20, 15, max), lat()]; // Continents, Archipelago, High Island, Low Island
   }
 }
 
@@ -745,7 +791,7 @@ function calculateMapCoordinates() {
 
 // temperature model
 function calculateTemperatures() {
-  console.time('calculateTemperatures');
+  TIME && console.time('calculateTemperatures');
   const cells = grid.cells;
   cells.temp = new Int8Array(cells.i.length); // temperature array
 
@@ -771,12 +817,12 @@ function calculateTemperatures() {
     return rn(height / 1000 * 6.5);
   }
 
-  console.timeEnd('calculateTemperatures');
+  TIME && console.timeEnd('calculateTemperatures');
 }
 
 // simplest precipitation model
 function generatePrecipitation() {
-  console.time('generatePrecipitation');
+  TIME && console.time('generatePrecipitation');
   prec.selectAll("*").remove();
   const cells = grid.cells;
   cells.prec = new Uint8Array(cells.i.length); // precipitation array
@@ -887,14 +933,14 @@ function generatePrecipitation() {
     if (southerly) wind.append("text").attr("x", graphWidth / 2).attr("y", graphHeight - 20).text("\u21C8");
   }();
 
-  console.timeEnd('generatePrecipitation');
+  TIME && console.timeEnd('generatePrecipitation');
 }
 
 // recalculate Voronoi Graph to pack cells
 function reGraph() {
-  console.time("reGraph");
-  let cells = grid.cells, points = grid.points, features = grid.features;
-  const newCells = {p:[], g:[], h:[], t:[], f:[], r:[], biome:[]}; // to store new data
+  TIME && console.time("reGraph");
+  let {cells, points, features} = grid;
+  const newCells = {p:[], g:[], h:[]}; // to store new data
   const spacing2 = grid.spacing ** 2;
 
   for (const i of cells.i) {
@@ -902,9 +948,10 @@ function reGraph() {
     const type = cells.t[i];
     if (height < 20 && type !== -1 && type !== -2) continue; // exclude all deep ocean points
     if (type === -2 && (i%4=== 0 || features[cells.f[i]].type === "lake")) continue; // exclude non-coastal lake points
-    const x = points[i][0], y = points[i][1];
+    const [x, y] = points[i];
 
-    addNewPoint(x, y); // add point to array
+    addNewPoint(i, x, y, height);
+
     // add additional points for cells along coast
     if (type === 1 || type === -1) {
       if (cells.b[i]) continue; // not for near-border cells
@@ -915,16 +962,16 @@ function reGraph() {
           if (dist2 < spacing2) return; // too close to each other
           const x1 = rn((x + points[e][0]) / 2, 1);
           const y1 = rn((y + points[e][1]) / 2, 1);
-          addNewPoint(x1, y1);
+          addNewPoint(i, x1, y1, height);
         }
       });
     }
+  }
 
-    function addNewPoint(x, y) {
-      newCells.p.push([x, y]);
-      newCells.g.push(i);
-      newCells.h.push(height);
-    }
+  function addNewPoint(i, x, y, height) {
+    newCells.p.push([x, y]);
+    newCells.g.push(i);
+    newCells.h.push(height);
   }
 
   calculateVoronoi(pack, newCells.p);
@@ -936,12 +983,12 @@ function reGraph() {
   cells.area = new Uint16Array(cells.i.length); // cell area
   cells.i.forEach(i => cells.area[i] = Math.abs(d3.polygonArea(getPackPolygon(i))));
 
-  console.timeEnd("reGraph");
+  TIME && console.timeEnd("reGraph");
 }
 
 // Detect and draw the coasline
 function drawCoastline() {
-  console.time('drawCoastline');
+  TIME && console.time('drawCoastline');
   reMarkFeatures();
   const cells = pack.cells, vertices = pack.vertices, n = cells.i.length, features = pack.features;
   const used = new Uint8Array(features.length); // store conneted features
@@ -977,7 +1024,7 @@ function drawCoastline() {
     if (features[f].type === "lake") {
       landMask.append("path").attr("d", path).attr("fill", "black").attr("id", "land_"+f);
       // waterMask.append("path").attr("d", path).attr("fill", "white").attr("id", "water_"+id); // uncomment to show over lakes
-      lakes.select("#"+features[f].group).append("path").attr("d", path).attr("id", "lake_"+f).attr("data-f", f); // draw the lake
+      lakes.select("#freshwater").append("path").attr("d", path).attr("id", "lake_"+f).attr("data-f", f); // draw the lake
     } else {
       landMask.append("path").attr("d", path).attr("fill", "white").attr("id", "land_"+f);
       waterMask.append("path").attr("d", path).attr("fill", "black").attr("id", "water_"+f);
@@ -989,7 +1036,7 @@ function drawCoastline() {
     if (f === largestLand) {
       const from = points[d3.scan(points, (a, b) => a[0] - b[0])];
       const to = points[d3.scan(points, (a, b) => b[0] - a[0])];
-      addRuler(from[0], from[1], to[0], to[1]);
+      rulers.create(Ruler, [from, to]);
     }
   }
 
@@ -1006,7 +1053,6 @@ function drawCoastline() {
     const chain = []; // vertices chain to form a path
     for (let i=0, current = start; i === 0 || current !== start && i < 50000; i++) {
       const prev = chain[chain.length-1]; // previous vertex in chain
-      //d3.select("#labels").append("text").attr("x", vertices.p[current][0]).attr("y", vertices.p[current][1]).text(i).attr("font-size", "1px");
       chain.push(current); // add current vertex to sequence
       const c = vertices.c[current] // cells adjacent to vertex
       const v = vertices.v[current] // neighboring vertices
@@ -1016,9 +1062,8 @@ function drawCoastline() {
       if (v[0] !== prev && c0 !== c1) current = v[0]; else
       if (v[1] !== prev && c1 !== c2) current = v[1]; else
       if (v[2] !== prev && c0 !== c2) current = v[2];
-      if (current === chain[chain.length-1]) {console.error("Next vertex is not found"); break;}
+      if (current === chain[chain.length-1]) {ERROR && console.error("Next vertex is not found"); break;}
     }
-    //chain.push(chain[0]); // push first vertex as the last one
     return chain;
   }
 
@@ -1040,15 +1085,15 @@ function drawCoastline() {
     }
   }
 
-  console.timeEnd('drawCoastline');
+  TIME && console.timeEnd('drawCoastline');
 }
 
 // Re-mark features (ocean, lakes, islands)
 function reMarkFeatures() {
-  console.time("reMarkFeatures");
-  const cells = pack.cells, features = pack.features = [0], temp = grid.cells.temp;
+  TIME && console.time("reMarkFeatures");
+  const cells = pack.cells, features = pack.features = [0];
   cells.f = new Uint16Array(cells.i.length); // cell feature number
-  cells.t = new Int16Array(cells.i.length); // cell type: 1 = land along coast; -1 = water along coast;
+  cells.t = new Int8Array(cells.i.length); // cell type: 1 = land along coast; -1 = water along coast;
   cells.haven = cells.i.length < 65535 ? new Uint16Array(cells.i.length) : new Uint32Array(cells.i.length);// cell haven (opposite water cell);
   cells.harbor = new Uint8Array(cells.i.length); // cell harbor (number of adjacent water cells);
 
@@ -1083,21 +1128,10 @@ function reMarkFeatures() {
 
     const type = land ? "island" : border ? "ocean" : "lake";
     let group;
-    if (type === "lake") group = defineLakeGroup(start, cellNumber, temp[cells.g[start]]);
-    else if (type === "ocean") group = defineOceanGroup(cellNumber);
+    if (type === "ocean") group = defineOceanGroup(cellNumber);
     else if (type === "island") group = defineIslandGroup(start, cellNumber);
     features.push({i, land, border, type, cells: cellNumber, firstCell: start, group});
     queue[0] = cells.f.findIndex(f => !f); // find unmarked cell
-  }
-
-  function defineLakeGroup(cell, number, temp) {
-    if (temp > 31) return "dry";
-    if (temp > 24) return "salt";
-    if (temp < -3) return "frozen";
-    const height = d3.max(cells.c[cell].map(c => cells.h[c]));
-    if (height > 69 && number < 3 && cell%5 === 0) return "sinkhole";
-    if (height > 69 && number < 10 && cell%5 === 0) return "lava";
-    return "freshwater";
   }
 
   function defineOceanGroup(number) {
@@ -1113,33 +1147,16 @@ function reMarkFeatures() {
     return "isle";
   }
 
-  console.timeEnd("reMarkFeatures");
-}
-
-// temporary elevate some lakes to resolve depressions and flux the water to form an open (exorheic) lake
-function elevateLakes() {
-  if (templateInput.value === "Atoll") return; // no need for Atolls
-  console.time('elevateLakes');
-  const cells = pack.cells, features = pack.features;
-  const maxCells = cells.i.length / 100; // size limit; let big lakes be closed (endorheic)
-  cells.i.forEach(i => {
-    if (cells.h[i] >= 20) return;
-    if (features[cells.f[i]].group !== "freshwater" || features[cells.f[i]].cells > maxCells) return;
-    cells.h[i] = 20;
-    //debug.append("circle").attr("cx", cells.p[i][0]).attr("cy", cells.p[i][1]).attr("r", .5).attr("fill", "blue");
-  });
-
-  console.timeEnd('elevateLakes');
+  TIME && console.timeEnd("reMarkFeatures");
 }
 
 // assign biome id for each cell
 function defineBiomes() {
-  console.time("defineBiomes");
+  TIME && console.time("defineBiomes");
   const cells = pack.cells, f = pack.features, temp = grid.cells.temp, prec = grid.cells.prec;
   cells.biome = new Uint8Array(cells.i.length); // biomes array
 
   for (const i of cells.i) {
-    if (f[cells.f[i]].group === "freshwater") cells.h[i] = 19; // de-elevate lakes; here to save some resources
     const t = temp[cells.g[i]]; // cell temperature
     const h = cells.h[i]; // cell height
     const m = h < 20 ? 0 : calculateMoisture(i); // cell moisture
@@ -1153,7 +1170,7 @@ function defineBiomes() {
     return rn(4 + d3.mean(n));
   }
 
-  console.timeEnd("defineBiomes");
+  TIME && console.timeEnd("defineBiomes");
 }
 
 // assign biome id to a cell
@@ -1168,8 +1185,8 @@ function getBiomeId(moisture, temperature, height) {
 
 // assess cells suitability to calculate population and rand cells for culture center and burgs placement
 function rankCells() {
-  console.time('rankCells');
-  const cells = pack.cells, f = pack.features;
+  TIME && console.time('rankCells');
+  const {cells, features} = pack;
   cells.s = new Int16Array(cells.i.length); // cell suitability array
   cells.pop = new Float32Array(cells.i.length); // cell population array
 
@@ -1185,12 +1202,14 @@ function rankCells() {
 
     if (cells.t[i] === 1) {
       if (cells.r[i]) s += 15; // estuary is valued
-      const type = f[cells.f[cells.haven[i]]].type;
-      const group = f[cells.f[cells.haven[i]]].group;
-      if (type === "lake") {
-        // lake coast is valued
-        if (group === "freshwater") s += 30;
-        else if (group !== "lava" && group !== "dry") s += 10;
+      const feature = features[cells.f[cells.haven[i]]];
+      if (feature.type === "lake") {
+        if (feature.group === "freshwater") s += 30;
+        else if (feature.group == "salt") s += 10;
+        else if (feature.group == "frozen") s += 1;
+        else if (feature.group == "dry") s -= 5;
+        else if (feature.group == "sinkhole") s -= 5;
+        else if (feature.group == "lava") s -= 30;
       } else {
         s += 5; // ocean coast is valued
         if (cells.harbor[i] === 1) s += 20; // safe sea harbor is valued
@@ -1202,13 +1221,13 @@ function rankCells() {
     cells.pop[i] = cells.s[i] > 0 ? cells.s[i] * cells.area[i] / areaMean : 0;
   }
 
-  console.timeEnd('rankCells');
+  TIME && console.timeEnd('rankCells');
 }
 
 // generate some markers
 function addMarkers(number = 1) {
   if (!number) return;
-  console.time("addMarkers");
+  TIME && console.time("addMarkers");
   const cells = pack.cells, states = pack.states;
 
   void function addVolcanoes() {
@@ -1374,12 +1393,12 @@ function addMarkers(number = 1) {
     return id;
   }
 
-  console.timeEnd("addMarkers");
+  TIME && console.timeEnd("addMarkers");
 }
 
 // regenerate some zones
 function addZones(number = 1) {
-  console.time("addZones");
+  TIME && console.time("addZones");
   const data = [], cells = pack.cells, states = pack.states, burgs = pack.burgs;
   const used = new Uint8Array(cells.i.length); // to store used cells
 
@@ -1690,7 +1709,7 @@ function addZones(number = 1) {
       .attr("points", d => getPackPolygon(d)).attr("id", function(d) {return this.parentNode.id+"_"+d});
   }()
 
-  console.timeEnd("addZones");
+  TIME && console.timeEnd("addZones");
 }
 
 // show map stats on generation complete
@@ -1712,11 +1731,11 @@ function showStatistics() {
 
   mapId = Date.now(); // unique map id is it's creation date number
   mapHistory.push({seed, width:graphWidth, height:graphHeight, template, created:mapId});
-  console.log(stats);
+  INFO && console.log(stats);
 }
 
 const regenerateMap = debounce(function() {
-  console.warn("Generate new random map");
+  WARN && console.warn("Generate new random map");
   closeDialogs("#worldConfigurator, #options3d");
   customization = 0;
   undraw();
@@ -1730,7 +1749,9 @@ const regenerateMap = debounce(function() {
 // clear the map
 function undraw() {
   viewbox.selectAll("path, circle, polygon, line, text, use, #zones > g, #armies > g, #ruler > g").remove();
-  defs.selectAll("path, clipPath").remove();
+  document.getElementById("deftemp").querySelectorAll("path, clipPath, svg").forEach(el => el.remove());
+  document.getElementById("coas").innerHTML = ""; // remove auto-generated emblems
   notes = [];
+  rulers = new Rulers();
   unfog();
 }

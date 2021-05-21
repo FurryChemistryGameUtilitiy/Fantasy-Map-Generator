@@ -31,8 +31,10 @@ function editBurg(id) {
   document.getElementById("burgRemoveGroup").addEventListener("click", removeBurgsGroup);
 
   document.getElementById("burgName").addEventListener("input", changeName);
-  document.getElementById("burgNameReCulture").addEventListener("click", generateNameCulture);
   document.getElementById("burgNameReRandom").addEventListener("click", generateNameRandom);
+  document.getElementById("burgType").addEventListener("input", changeType);
+  document.getElementById("burgCulture").addEventListener("input", changeCulture);
+  document.getElementById("burgNameReCulture").addEventListener("click", generateNameCulture);
   document.getElementById("burgPopulation").addEventListener("change", changePopulation);
   burgBody.querySelectorAll(".burgFeature").forEach(el => el.addEventListener("click", toggleFeature));
 
@@ -43,17 +45,36 @@ function editBurg(id) {
   document.getElementById("burgEditAnchorStyle").addEventListener("click", editGroupAnchorStyle);
 
   document.getElementById("burgSeeInMFCG").addEventListener("click", openInMFCG);
-  document.getElementById("burgOpenCOA").addEventListener("click", openInIAHG);
+  document.getElementById("burgEditEmblem").addEventListener("click", openEmblemEdit);
   document.getElementById("burgRelocate").addEventListener("click", toggleRelocateBurg);
   document.getElementById("burglLegend").addEventListener("click", editBurgLegend);
+  document.getElementById("burgLock").addEventListener("click", toggleBurgLockButton);
+  document.getElementById("burgLock").addEventListener("mouseover", showBurgELockTip);
   document.getElementById("burgRemove").addEventListener("click", removeSelectedBurg);
 
   function updateBurgValues() {
     const id = +elSelected.attr("data-id");
     const b = pack.burgs[id];
+    const province = pack.cells.province[b.cell];
+    const provinceName = province ? pack.provinces[province].fullName + ", " : "";
+    const stateName = pack.states[b.state].fullName || pack.states[b.state].name;
+    document.getElementById("burgProvinceAndState").innerHTML = provinceName + stateName;
+
     document.getElementById("burgName").value = b.name;
+    document.getElementById("burgType").value = b.type || "Generic";
     document.getElementById("burgPopulation").value = rn(b.population * populationRate.value * urbanization.value);
     document.getElementById("burgEditAnchorStyle").style.display = +b.port ? "inline-block" : "none";
+
+    // update list and select culture
+    const cultureSelect = document.getElementById("burgCulture");
+    cultureSelect.options.length = 0;
+    const cultures = pack.cultures.filter(c => !c.removed);
+    cultures.forEach(c => cultureSelect.options.add(new Option(c.name, c.i, false, c.i === b.culture)));
+
+    const temperature = grid.cells.temp[pack.cells.g[b.cell]];
+    document.getElementById("burgTemperature").innerHTML = convertTemperature(temperature);
+    document.getElementById("burgTemperatureLikeIn").innerHTML = getTemperatureLikeness(temperature);
+    document.getElementById("burgElevation").innerHTML = getHeight(pack.cells.h[b.cell]);
 
     // toggle features
     if (b.capital) document.getElementById("burgCapital").classList.remove("inactive");
@@ -71,6 +92,9 @@ function editBurg(id) {
     if (b.shanty) document.getElementById("burgShanty").classList.remove("inactive");
     else document.getElementById("burgShanty").classList.add("inactive");
 
+    //toggle lock
+    updateBurgLockIcon();
+
     // select group
     const group = elSelected.node().parentNode.id;
     const select = document.getElementById("burgSelectGroup");
@@ -79,6 +103,23 @@ function editBurg(id) {
     burgLabels.selectAll("g").each(function() {
       select.options.add(new Option(this.id, this.id, false, this.id === group));
     });
+
+    // set emlem image
+    const coaID = "burgCOA"+id;
+    COArenderer.trigger(coaID, b.coa);
+    document.getElementById("burgEmblem").setAttribute("href", "#" + coaID);
+  }
+
+  // in °C, array from -1 °C; source: https://en.wikipedia.org/wiki/List_of_cities_by_average_temperature
+  function getTemperatureLikeness(temperature) {
+    if (temperature < -5) return "Yakutsk";
+    const cities = [
+      "Snag (Yukon)", "Yellowknife (Canada)", "Okhotsk (Russia)", "Fairbanks (Alaska)", "Nuuk (Greenland)", "Murmansk", // -5 - 0
+      "Arkhangelsk", "Anchorage", "Tromsø", "Reykjavik", "Riga", "Stockholm", "Halifax", "Prague", "Copenhagen", "London", // 1 - 10
+      "Antwerp", "Paris", "Milan", "Batumi", "Rome", "Dubrovnik", "Lisbon", "Barcelona", "Marrakesh", "Alexandria", // 11 - 20
+      "Tegucigalpa", "Guangzhou", "Rio de Janeiro", "Dakar", "Miami", "Jakarta", "Mogadishu", "Bangkok", "Aden", "Khartoum"]; // 21 - 30
+    if (temperature > 30) return "Mecca";
+    return cities[temperature+5] || null;
   }
 
   function dragBurgLabel() {
@@ -141,7 +182,7 @@ function editBurg(id) {
     const label = document.querySelector("#burgLabels [data-id='" + id + "']");
     const icon = document.querySelector("#burgIcons [data-id='" + id + "']");
     const anchor = document.querySelector("#anchors [data-id='" + id + "']");
-    if (!label || !icon) {console.error("Cannot find label or icon elements"); return;}
+    if (!label || !icon) {ERROR && console.error("Cannot find label or icon elements"); return;}
 
     const labelG = document.querySelector("#burgLabels > #"+oldGroup);
     const iconG = document.querySelector("#burgIcons > #"+oldGroup);
@@ -184,12 +225,12 @@ function editBurg(id) {
     for (let i=0; i < group.children.length; i++) {
       burgsInGroup.push(+group.children[i].dataset.id);
     }
-    const burgsToRemove = burgsInGroup.filter(b => !pack.burgs[b].capital);
+    const burgsToRemove = burgsInGroup.filter(b => !(pack.burgs[b].capital || pack.burgs[b].lock));
     const capital = burgsToRemove.length < burgsInGroup.length;
 
     alertMessage.innerHTML = `Are you sure you want to remove
-      ${basic || capital ? "all elements in the group" : "the entire burg group"}?
-      <br>Please note that capital burgs will not be deleted.
+      ${basic || capital ? "all unlocked elements in the group" : "the entire burg group"}?
+      <br>Please note that capital or locked burgs will not be deleted.
       <br><br>Burgs to be removed: ${burgsToRemove.length}`;
     $("#alert").dialog({resizable: false, title: "Remove route group",
       buttons: {
@@ -220,16 +261,26 @@ function editBurg(id) {
     elSelected.text(burgName.value);
   }
 
+  function generateNameRandom() {
+    const base = rand(nameBases.length-1);
+    burgName.value = Names.getBase(base);
+    changeName();
+  }
+
+  function changeType() {
+    const id = +elSelected.attr("data-id");
+    pack.burgs[id].type = this.value;
+  }
+
+  function changeCulture() {
+    const id = +elSelected.attr("data-id");
+    pack.burgs[id].culture = +this.value;
+  }
+
   function generateNameCulture() {
     const id = +elSelected.attr("data-id");
     const culture = pack.burgs[id].culture;
     burgName.value = Names.getCulture(culture);
-    changeName();
-  }
-
-  function generateNameRandom() {
-    const base = rand(nameBases.length-1);
-    burgName.value = Names.getBase(base);
     changeName();
   }
 
@@ -251,6 +302,25 @@ function editBurg(id) {
 
     if (b.port) document.getElementById("burgEditAnchorStyle").style.display = "inline-block";
     else document.getElementById("burgEditAnchorStyle").style.display = "none";
+  }
+
+  function toggleBurgLockButton() {
+    const id = +elSelected.attr("data-id");
+    toggleBurgLock(id);
+    updateBurgLockIcon();
+  }
+
+  function updateBurgLockIcon() {
+    const id = +elSelected.attr("data-id");
+    const b = pack.burgs[id];
+    if (b.lock) {document.getElementById("burgLock").classList.remove("icon-lock-open"); document.getElementById("burgLock").classList.add("icon-lock");}
+    else {document.getElementById("burgLock").classList.remove("icon-lock"); document.getElementById("burgLock").classList.add("icon-lock-open");}
+
+  }
+
+  function showBurgELockTip() {
+    const id = +elSelected.attr("data-id");
+    showBurgLockTip(id);
   }
 
   function showStyleSection() {
@@ -296,7 +366,8 @@ function editBurg(id) {
       if (!seed && burg.MFCGlink) {openURL(burg.MFCGlink); return;}
       const cells = pack.cells;
       const name = elSelected.text();
-      const size = Math.max(Math.min(rn(burg.population), 65), 6);
+      const size = Math.max(Math.min(rn(burg.population), 100), 6); // to be removed once change on MFDC is done
+      const population = rn(burg.population * populationRate.value * urbanization.value);
   
       const s = burg.MFCG || defSeed;
       const cell = burg.cell;
@@ -321,22 +392,14 @@ function editBurg(id) {
       }
 
       const site = "http://fantasycities.watabou.ru/?random=0&continuous=0";
-      const url = `${site}&name=${name}&size=${size}&seed=${s}&hub=${hub}&river=${river}&coast=${coast}&citadel=${citadel}&plaza=${plaza}&temple=${temple}&walls=${walls}&shantytown=${shanty}${sea}`;
+      const url = `${site}&name=${name}&population=${population}&size=${size}&seed=${s}&hub=${hub}&river=${river}&coast=${coast}&citadel=${citadel}&plaza=${plaza}&temple=${temple}&walls=${walls}&shantytown=${shanty}${sea}`;
       openURL(url);
     }
   }
 
-  function openInIAHG(event) {
-    const id = elSelected.attr("data-id"), burg = pack.burgs[id], defSeed = `${seed}-b${id}`;
-    const openIAHG = () => openURL("https://ironarachne.com/heraldry/" + (burg.IAHG || defSeed));
-
-    if (isCtrlClick(event)) {
-      prompt(`Please provide an Iron Arachne Heraldry Generator seed. <br>Default seed is a combination of FMG map seed and burg id (${defSeed})`, 
-      {default:burg.IAHG || defSeed}, v => {
-        if (v && v != defSeed) burg.IAHG = v;
-        openIAHG();
-      });
-    } else openIAHG();
+  function openEmblemEdit() {
+    const id = +elSelected.attr("data-id"), burg = pack.burgs[id];
+    editEmblem("burg", "burgCOA"+id, burg);
   }
 
   function toggleRelocateBurg() {

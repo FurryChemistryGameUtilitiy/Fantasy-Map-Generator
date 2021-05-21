@@ -1,6 +1,11 @@
 // UI module to control the style
 "use strict";
 
+// store some style inputs as options
+styleElements.addEventListener("change", function(ev) {
+  if (ev.target.dataset.stored) lock(ev.target.dataset.stored);
+});
+
 // select element to be edited
 function editStyle(element, group) {
   showOptions();
@@ -32,7 +37,7 @@ function selectStyleElement() {
 
   // active group element
   const group = styleGroupSelect.value;
-  if (sel == "routes" || sel == "labels" || sel === "coastline" || sel == "lakes" || sel == "anchors" || sel == "burgIcons" || sel == "borders") {
+  if (["routes", "labels", "coastline", "lakes", "anchors", "burgIcons", "borders"].includes(sel)) {
     el = d3.select("#"+sel).select("g#"+group).size()
       ? d3.select("#"+sel).select("g#"+group)
       : d3.select("#"+sel).select("g");
@@ -40,25 +45,24 @@ function selectStyleElement() {
 
   if (sel !== "landmass" && sel !== "legend") {
     // opacity
-    styleOpacity.style.display = "block";
-    styleOpacityInput.value = styleOpacityOutput.value = el.attr("opacity") || 1;
+    if (sel !== "ocean") {
+      styleOpacity.style.display = "block";
+      styleOpacityInput.value = styleOpacityOutput.value = el.attr("opacity") || 1;
+    }
 
     // filter
     styleFilter.style.display = "block";
-    if (sel == "ocean") el = oceanLayers;
     styleFilterInput.value = el.attr("filter") || "";
   }
 
-  if (sel == "ocean") el = oceanLayers.select("rect");
-
   // fill
-  if (sel === "rivers" || sel === "lakes" || sel === "landmass" || sel === "prec" || sel === "ice" || sel === "fogging") {
+  if (["rivers", "lakes", "landmass", "prec", "ice", "fogging"].includes(sel)) {
     styleFill.style.display = "block";
     styleFillInput.value = styleFillOutput.value = el.attr("fill");
   }
 
   // stroke color and width
-  if (sel === "armies" ||sel === "routes" || sel === "lakes" || sel === "borders" || sel === "cults" || sel === "cells" || sel === "gridOverlay" || sel === "coastline" || sel === "prec" || sel === "ice" || sel === "icons" || sel === "coordinates"|| sel === "zones") {
+  if (["armies", "routes", "lakes", "borders", "cults", "relig", "cells", "coastline", "prec", "ice", "icons", "coordinates", "zones", "gridOverlay"].includes(sel)) {
     styleStroke.style.display = "block";
     styleStrokeInput.value = styleStrokeOutput.value = el.attr("stroke");
     styleStrokeWidth.style.display = "block";
@@ -66,22 +70,21 @@ function selectStyleElement() {
   }
 
   // stroke dash
-  if (sel === "routes" || sel === "borders" || sel === "gridOverlay" || sel === "temperature" || sel === "legend" || sel === "population" || sel === "coordinates"|| sel === "zones") {
+  if (["routes", "borders", "temperature", "legend", "population", "coordinates", "zones", "gridOverlay"].includes(sel)) {
     styleStrokeDash.style.display = "block";
     styleStrokeDasharrayInput.value = el.attr("stroke-dasharray") || "";
     styleStrokeLinecapInput.value = el.attr("stroke-linecap") || "inherit";
   }
 
   // clipping
-  if (sel === "cells" || sel === "gridOverlay" || sel === "coordinates" || sel === "compass" || sel === "terrain" || sel === "temperature" || sel === "routes" || sel === "texture" || sel === "biomes"|| sel === "zones") {
+  if (["cells", "gridOverlay", "coordinates", "compass", "terrain", "temperature", "routes", "texture", "biomes", "zones"].includes(sel)) {
     styleClipping.style.display = "block";
     styleClippingInput.value = el.attr("mask") || "";
   }
 
   // show specific sections
-  if (sel === "gridOverlay") styleGrid.style.display = "block";
   if (sel === "texture") styleTexture.style.display = "block";
-  if (sel === "routes" || sel === "labels" || sel == "anchors" || sel == "burgIcons" || sel === "coastline" || sel === "lakes" || sel === "borders") styleGroup.style.display = "block";
+  if (sel === "routes", "labels" || sel == "anchors" || sel == "burgIcons", "coastline", "lakes", "borders") styleGroup.style.display = "block";
 
   if (sel === "terrs") {
     styleHeightmap.style.display = "block";
@@ -98,18 +101,17 @@ function selectStyleElement() {
   }
 
   if (sel === "gridOverlay") {
-    styleShift.style.display = "block";
+    styleGrid.style.display = "block";
     styleGridType.value = el.attr("type");
-    styleGridSize.value = el.attr("size");
+    styleGridScale.value = el.attr("scale") || 1;
+    styleGridShiftX.value = el.attr("dx") || 0;
+    styleGridShiftY.value = el.attr("dy") || 0;
     calculateFriendlyGridSize();
-    const tr = parseTransform(el.attr("transform"));
-    styleShiftX.value = tr[0];
-    styleShiftY.value = tr[1];
   }
 
   if (sel === "compass") {
     styleCompass.style.display = "block";
-    const tr = parseTransform(d3.select("#rose").attr("transform"));
+    const tr = parseTransform(compass.select("use").attr("transform"));
     styleCompassShiftX.value = tr[0];
     styleCompassShiftY.value = tr[1];
     styleCompassSizeInput.value = styleCompassSizeOutput.value = tr[2];
@@ -147,6 +149,18 @@ function selectStyleElement() {
     styleFillInput.value = styleFillOutput.value = el.attr("fill") || "#3e3e4b";
     styleStrokeInput.value = styleStrokeOutput.value = el.attr("stroke") || "#3a3a3a";
     styleStrokeWidthInput.value = styleStrokeWidthOutput.value = el.attr("stroke-width") || 0;
+    styleSelectFont.value = fonts.indexOf(el.attr("data-font"));
+    styleInputFont.style.display = "none";
+    styleInputFont.value = "";
+    styleFontSize.value = el.attr("data-size");
+  }
+
+  if (sel === "provs") {
+    styleFill.style.display = "block";
+    loadDefaultFonts();
+    styleFont.style.display = "block";
+    styleSize.style.display = "block";
+    styleFillInput.value = styleFillOutput.value = el.attr("fill") || "#111111";
     styleSelectFont.value = fonts.indexOf(el.attr("data-font"));
     styleInputFont.style.display = "none";
     styleInputFont.value = "";
@@ -200,9 +214,9 @@ function selectStyleElement() {
 
   if (sel === "ocean") {
     styleOcean.style.display = "block";
-    styleOceanBack.value = styleOceanBackOutput.value = d3.color(svg.style("background-color")).hex();
-    styleOceanFore.value = styleOceanForeOutput.value = oceanLayers.select("#oceanBase").attr("fill");
-    styleOceanPattern.value = svg.select("#oceanicPattern").attr("filter");
+    styleOceanFill.value = styleOceanFillOutput.value = oceanLayers.select("#oceanBase").attr("fill");
+    styleOceanPattern.value = document.getElementById("oceanicPattern")?.getAttribute("href");
+    styleOceanPatternOpacity.value = styleOceanPatternOpacityOutput.value = document.getElementById("oceanPattern").getAttribute("opacity") || 1;
     outlineLayers.value = oceanLayers.attr("layers");
   }
 
@@ -226,9 +240,15 @@ function selectStyleElement() {
     styleArmiesSize.value = styleArmiesSizeOutput.value = el.attr("box-size");
   }
 
+  if (sel === "emblems") {
+    styleEmblems.style.display = "block";
+    styleStrokeWidth.style.display = "block";
+    styleStrokeWidthInput.value = styleStrokeWidthOutput.value = el.attr("stroke-width") || 1;
+  }
+
   // update group options
   styleGroupSelect.options.length = 0; // remove all options
-  if (sel === "routes" || sel === "labels" || sel === "coastline" || sel === "lakes" || sel === "anchors" || sel === "burgIcons" || sel === "borders") {
+  if (["routes", "labels", "coastline", "lakes", "anchors", "burgIcons", "borders"].includes(sel)) {
     document.getElementById(sel).querySelectorAll("g").forEach(el => {
       if (el.id === "burgLabels") return;
       const count = el.childElementCount;
@@ -263,19 +283,23 @@ styleFillInput.addEventListener("input", function() {
 styleStrokeInput.addEventListener("input", function() {
   styleStrokeOutput.value = this.value;
   getEl().attr('stroke', this.value);
+  if (styleElementSelect.value === "gridOverlay" && layerIsOn("toggleGrid")) drawGrid();
 });
 
 styleStrokeWidthInput.addEventListener("input", function() {
   styleStrokeWidthOutput.value = this.value;
   getEl().attr('stroke-width', +this.value);
+  if (styleElementSelect.value === "gridOverlay" && layerIsOn("toggleGrid")) drawGrid();
 });
 
 styleStrokeDasharrayInput.addEventListener("input", function() {
   getEl().attr('stroke-dasharray', this.value);
+  if (styleElementSelect.value === "gridOverlay" && layerIsOn("toggleGrid")) drawGrid();
 });
 
 styleStrokeLinecapInput.addEventListener("change", function() {
   getEl().attr('stroke-linecap', this.value);
+  if (styleElementSelect.value === "gridOverlay" && layerIsOn("toggleGrid")) drawGrid();
 });
 
 styleOpacityInput.addEventListener("input", function() {
@@ -293,8 +317,8 @@ styleFilterInput.addEventListener("change", function() {
 
 styleTextureInput.addEventListener("change", function() {
   if (this.value === "none") texture.select("image").attr("xlink:href", "");
-  else if (this.value === "default") texture.select("image").attr("xlink:href", getDefaultTexture());
-  else setBase64Texture(this.value);
+  if (this.value === "default") texture.select("image").attr("xlink:href", getDefaultTexture());
+  else getBase64(this.value, base64 => texture.select("image").attr("xlink:href", base64));
 });
 
 styleTextureShiftX.addEventListener("input", function() {
@@ -315,18 +339,27 @@ styleGridType.addEventListener("change", function() {
   calculateFriendlyGridSize();
 });
 
-styleGridSize.addEventListener("input", function() {
-  getEl().attr("size", this.value);
+styleGridScale.addEventListener("input", function() {
+  getEl().attr("scale", this.value);
   if (layerIsOn("toggleGrid")) drawGrid();
   calculateFriendlyGridSize();
 });
 
 function calculateFriendlyGridSize() {
-  const square = styleGridType.value === "square";
-  const size = square ? styleGridSize.value : styleGridSize.value * Math.cos(30 * Math.PI / 180) * 2;
+  const size = styleGridScale.value * 25;
   const friendly = `${rn(size * distanceScaleInput.value, 2)} ${distanceUnitInput.value}`;
   styleGridSizeFriendly.value = friendly;
 }
+
+styleGridShiftX.addEventListener("input", function() {
+  getEl().attr("dx", this.value);
+  if (layerIsOn("toggleGrid")) drawGrid();
+});
+
+styleGridShiftY.addEventListener("input", function() {
+  getEl().attr("dy", this.value);
+  if (layerIsOn("toggleGrid")) drawGrid();
+});
 
 styleShiftX.addEventListener("input", shiftElement);
 styleShiftY.addEventListener("input", shiftElement);
@@ -348,18 +381,18 @@ styleCoastlineAuto.addEventListener("change", function() {
   invokeActiveZooming();
 });
 
-styleOceanBack.addEventListener("input", function() {
-  svg.style("background-color", this.value);
-  styleOceanBackOutput.value = this.value;
-});
-
-styleOceanFore.addEventListener("input", function() {
+styleOceanFill.addEventListener("input", function() {
   oceanLayers.select("rect").attr("fill", this.value);
-  styleOceanForeOutput.value = this.value;
+  styleOceanFillOutput.value = this.value;
 });
 
 styleOceanPattern.addEventListener("change", function() {
-  svg.select("#oceanicPattern").attr("filter", this.value);
+  document.getElementById("oceanicPattern")?.setAttribute("href", this.value);
+});
+
+styleOceanPatternOpacity.addEventListener("input", function() {
+  document.getElementById("oceanPattern").setAttribute("opacity", this.value);
+  styleOceanPatternOpacityOutput.value = this.value;
 });
 
 outlineLayers.addEventListener("change", function() {
@@ -461,7 +494,7 @@ styleCompassShiftY.addEventListener("input", shiftCompass);
 
 function shiftCompass() {
   const tr = `translate(${styleCompassShiftX.value} ${styleCompassShiftY.value}) scale(${styleCompassSizeInput.value})`;
-  d3.select("#rose").attr("transform", tr);
+  compass.select("use").attr("transform", tr);
 }
 
 styleLegendColItems.addEventListener("input", function() {
@@ -614,6 +647,10 @@ styleArmiesSize.addEventListener("input", function() {
   });
 });
 
+styleEmblemsStateSizeInput.addEventListener("input", drawEmblems);
+styleEmblemsProvinceSizeInput.addEventListener("input", drawEmblems);
+styleEmblemsBurgSizeInput.addEventListener("input", drawEmblems);
+
 // request a URL to image to be used as a texture
 function textureProvideURL() {
   alertMessage.innerHTML = `Provide an image URL to be used as a texture:
@@ -629,7 +666,7 @@ function textureProvideURL() {
         opt.text = name.slice(0, 20);
         styleTextureInput.add(opt);
         styleTextureInput.value = textureURL.value;
-        setBase64Texture(textureURL.value);
+        getBase64(textureURL.value, base64 => texture.select("image").attr("xlink:href", base64));
         zoom.scaleBy(svg, 1.00001); // enforce browser re-draw
         $(this).dialog("close");
       },
@@ -638,22 +675,8 @@ function textureProvideURL() {
   });
 }
 
-function setBase64Texture(url) {
-  const xhr = new XMLHttpRequest();
-  xhr.onload = function() {
-    const reader = new FileReader();
-    reader.onloadend = function() {
-      texture.select("image").attr("xlink:href", reader.result);
-    }
-    reader.readAsDataURL(xhr.response);
-  };
-  xhr.open('GET', url);
-  xhr.responseType = 'blob';
-  xhr.send();
-};
-
 function fetchTextureURL(url) {
-  console.log("Provided URL is", url);
+  INFO && console.log("Provided URL is", url);
   const img = new Image();
   img.onload = function () {
     const canvas = document.getElementById("texturePreview");
@@ -664,17 +687,17 @@ function fetchTextureURL(url) {
   img.src = url;
 }
 
-function armiesStyle() {
-  return `#armies text {stroke: none; fill: #fff; text-shadow: 0 0 4px #000; dominant-baseline: central; text-anchor: middle; font-family: Helvetica; fill-opacity: 1;}#armies text.regimentIcon {font-size: .8em;}`;
+const defaultStyles = {
+  styleAncient: `{"#map":{"background-color":"#000000","filter":"url(#filter-sepia)","data-filter":"sepia"},"#armies":{"font-size":6,"box-size":3,"stroke":"#000","stroke-width":0.05,"opacity":0.8,"fill-opacity":0.8,"filter":null},"#biomes":{"opacity":null,"filter":null,"mask":null},"#stateBorders":{"opacity":0.8,"stroke":"#56566d","stroke-width":1,"stroke-dasharray":2,"stroke-linecap":"butt","filter":null},"#provinceBorders":{"opacity":0.8,"stroke":"#56566d","stroke-width":0.2,"stroke-dasharray":1,"stroke-linecap":"butt","filter":null},"#cells":{"opacity":null,"stroke":"#808080","stroke-width":0.1,"filter":null,"mask":null},"#gridOverlay":{"opacity":0.8,"scale":1,"dx":0,"dy":"0","type":"pointyHex","stroke":"#808080","stroke-width":0.5,"stroke-dasharray":null,"stroke-linecap":null,"transform":null,"filter":null,"mask":null},"#coordinates":{"opacity":1,"data-size":12,"font-size":12,"stroke":"#d4d4d4","stroke-width":1,"stroke-dasharray":5,"stroke-linecap":null,"filter":null,"mask":null},"#compass":{"opacity":0.8,"transform":null,"filter":null,"mask":"url(#water)","shape-rendering":"optimizespeed"},"#rose":{"transform":"translate(80 80) scale(.25)"},"#relig":{"opacity":0.7,"stroke":"#404040","stroke-width":0.7,"filter":null},"#cults":{"opacity":0.6,"stroke":"#777777","stroke-width":0.5,"stroke-dasharray":null,"stroke-linecap":null,"filter":null},"#landmass":{"opacity":1,"fill":"#eee9d7","filter":null},"#markers":{"opacity":null,"rescale":1,"filter":"url(#dropShadow01)"},"#prec":{"opacity":null,"stroke":"#000000","stroke-width":0.1,"fill":"#003dff","filter":null},"#population":{"opacity":null,"stroke-width":1.6,"stroke-dasharray":null,"stroke-linecap":"butt","filter":null},"#rural":{"stroke":"#0000ff"},"#urban":{"stroke":"#ff0000"},"#freshwater":{"opacity":0.5,"fill":"#a6c1fd","stroke":"#5f799d","stroke-width":0.7,"filter":null},"#salt":{"opacity":0.5,"fill":"#409b8a","stroke":"#388985","stroke-width":0.7,"filter":null},"#sinkhole":{"opacity":1,"fill":"#5bc9fd","stroke":"#53a3b0","stroke-width":0.7,"filter":null},"#frozen":{"opacity":0.95,"fill":"#cdd4e7","stroke":"#cfe0eb","stroke-width":0,"filter":null},"#lava":{"opacity":0.7,"fill":"#90270d","stroke":"#f93e0c","stroke-width":2,"filter":"url(#crumpled)"},"#dry":{"opacity":0.7,"fill":"#c9bfa7","stroke":"#8e816f","stroke-width":0.7,"filter":null},"#sea_island":{"opacity":0.5,"stroke":"#1f3846","stroke-width":0.7,"filter":"url(#dropShadow)","auto-filter":1},"#lake_island":{"opacity":1,"stroke":"#7c8eaf","stroke-width":0.35,"filter":null},"#terrain":{"opacity":null,"set":"simple","size":1,"density":0.4,"filter":null,"mask":null},"#rivers":{"opacity":null,"filter":null,"fill":"#5d97bb"},"#ruler":{"opacity":null,"filter":null},"#roads":{"opacity":0.8,"stroke":"#2e1607","stroke-width":1.23,"stroke-dasharray":3,"stroke-linecap":"inherit","filter":null,"mask":null},"#trails":{"opacity":0.8,"stroke":"#331809","stroke-width":0.5,"stroke-dasharray":"1 2","stroke-linecap":"butt","filter":null,"mask":null},"#searoutes":{"opacity":0.8,"stroke":"#ffffff","stroke-width":0.8,"stroke-dasharray":"1 2","stroke-linecap":"round","filter":null,"mask":null},"#regions":{"opacity":0.4,"filter":""},"#statesHalo":{"opacity":1,"data-width":10,"stroke-width":10},"#provs":{"opacity":0.7,"fill":"#000000","data-size":10,"font-size":10,"font-family":"Georgia","data-font":"Georgia","filter":null},"#temperature":{"opacity":null,"font-size":"8px","fill":"#000000","fill-opacity":0.3,"stroke":null,"stroke-width":1.8,"stroke-dasharray":null,"stroke-linecap":null,"filter":null},"#ice":{"opacity":0.8,"fill":"#e8f0f6","stroke":"#e8f0f6","stroke-width":1,"filter":"url(#outline)"},"#emblems":{"opacity":0.6,"stroke-width":0.8,"filter":"url(#dropShadow05)"},"#texture":{"opacity":null,"filter":null,"mask":"url(#land)"},"#textureImage":{},"#zones":{"opacity":0.6,"stroke":"#333333","stroke-width":0,"stroke-dasharray":null,"stroke-linecap":"butt","filter":null,"mask":null},"#ocean":{"opacity":1},"#oceanLayers":{"filter":"url(#blur5)","layers":"-6,-4,-2"},"#oceanBase":{"fill":"#a7a01f"},"#oceanPattern":{"opacity":0.2},"#oceanicPattern":{"href":"./images/pattern1.png"},"#terrs":{"opacity":null,"scheme":"light","terracing":0,"skip":0,"relax":0,"curve":0,"filter":null,"mask":"url(#land)"},"#legend":{"data-size":13,"font-size":13,"data-font":"Almendra+SC","font-family":"Almendra SC","stroke":"#812929","stroke-width":2.5,"stroke-dasharray":"0 4 10 4","stroke-linecap":"round","data-x":99,"data-y":93,"data-columns":8},"#legendBox":{},"#burgLabels > #cities":{"opacity":1,"fill":"#3e3e4b","data-size":8,"font-size":8,"data-font":"Almendra+SC","font-family":"Almendra SC"},"#burgIcons > #cities":{"opacity":1,"fill":"#fdfab9","fill-opacity":0.7,"size":1,"stroke":"#54251d","stroke-width":0.3,"stroke-dasharray":".3 .4","stroke-linecap":"butt"},"#anchors > #cities":{"opacity":1,"fill":"#ffffff","size":2,"stroke":"#3e3e4b","stroke-width":1.2},"#burgLabels > #towns":{"opacity":1,"fill":"#3e3e4b","data-size":4,"font-size":4,"data-font":"Almendra+SC","font-family":"Almendra SC"},"#burgIcons > #towns":{"opacity":1,"fill":"#fef4d8","fill-opacity":0.7,"size":0.5,"stroke":"#463124","stroke-width":0.12,"stroke-dasharray":"","stroke-linecap":"butt"},"#anchors > #towns":{"opacity":1,"fill":"#ffffff","size":1,"stroke":"#3e3e4b","stroke-width":1.2},"#labels > #states":{"opacity":1,"fill":"#3e3e4b","stroke":"#3a3a3a","stroke-width":0,"data-size":22,"font-size":22,"data-font":"Almendra+SC","font-family":"Almendra SC","filter":null},"#labels > #addedLabels":{"opacity":1,"fill":"#3e3e4b","stroke":"#3a3a3a","stroke-width":0,"data-size":18,"font-size":18,"data-font":"Almendra+SC","font-family":"Almendra SC","filter":null},"#fogging":{"opacity":0.98,"fill":"#30426f","filter":null}}`,
+  styleGloom: `{"#map":{"background-color":"#000000","filter":null,"data-filter":null},"#armies":{"font-size":6,"box-size":3,"stroke":"#000","stroke-width":0.3,"opacity":1,"fill-opacity":1,"filter":null},"#biomes":{"opacity":null,"filter":"url(#blur5)","mask":"url(#land)"},"#stateBorders":{"opacity":1,"stroke":"#56566d","stroke-width":1,"stroke-dasharray":2,"stroke-linecap":"butt","filter":""},"#provinceBorders":{"opacity":1,"stroke":"#56566d","stroke-width":0.3,"stroke-dasharray":".7 1","stroke-linecap":"butt","filter":null},"#cells":{"opacity":null,"stroke":"#808080","stroke-width":0.1,"filter":null,"mask":null},"#gridOverlay":{"opacity":0.8,"scale":1,"dx":0,"dy":"0","type":"pointyHex","stroke":"#808080","stroke-width":0.5,"stroke-dasharray":null,"stroke-linecap":null,"transform":null,"filter":null,"mask":null},"#coordinates":{"opacity":1,"data-size":14,"font-size":14,"stroke":"#4a4a4a","stroke-width":1,"stroke-dasharray":6,"stroke-linecap":null,"filter":"","mask":""},"#compass":{"opacity":0.6,"transform":null,"filter":null,"mask":"url(#water)","shape-rendering":"optimizespeed"},"#rose":{"transform":"translate(100 100) scale(0.3)"},"#relig":{"opacity":0.7,"stroke":"#404040","stroke-width":1,"filter":null},"#cults":{"opacity":0.7,"stroke":"#777777","stroke-width":1.5,"stroke-dasharray":null,"stroke-linecap":null,"filter":null},"#landmass":{"opacity":1,"fill":"#e0e0e0","filter":null},"#markers":{"opacity":0.8,"rescale":1,"filter":"url(#dropShadow05)"},"#prec":{"opacity":null,"stroke":"#000000","stroke-width":0.1,"fill":"#003dff","filter":null},"#population":{"opacity":null,"stroke-width":1.6,"stroke-dasharray":null,"stroke-linecap":"butt","filter":null},"#rural":{"stroke":"#0000aa"},"#urban":{"stroke":"#9d0000"},"#freshwater":{"opacity":0.5,"fill":"#a6c1fd","stroke":"#5f799d","stroke-width":0.7,"filter":null},"#salt":{"opacity":0.5,"fill":"#409b8a","stroke":"#388985","stroke-width":0.7,"filter":null},"#sinkhole":{"opacity":1,"fill":"#5bc9fd","stroke":"#53a3b0","stroke-width":0.7,"filter":null},"#frozen":{"opacity":0.95,"fill":"#cdd4e7","stroke":"#cfe0eb","stroke-width":0,"filter":null},"#lava":{"opacity":0.7,"fill":"#90270d","stroke":"#f93e0c","stroke-width":2,"filter":"url(#crumpled)"},"#dry":{"opacity":0.7,"fill":"#c9bfa7","stroke":"#8e816f","stroke-width":0.7,"filter":null},"#sea_island":{"opacity":0.6,"stroke":"#1f3846","stroke-width":0.7,"filter":"url(#dropShadow)","auto-filter":1},"#lake_island":{"opacity":1,"stroke":"#7c8eaf","stroke-width":0.35,"filter":null},"#terrain":{"opacity":0.9,"set":"simple","size":1,"density":0.4,"filter":null,"mask":null},"#rivers":{"opacity":null,"filter":"","fill":"#779582"},"#ruler":{"opacity":null,"filter":null},"#roads":{"opacity":1,"stroke":"#8b4418","stroke-width":0.9,"stroke-dasharray":"2 3","stroke-linecap":"round","filter":"","mask":null},"#trails":{"opacity":1,"stroke":"#844017","stroke-width":0.2,"stroke-dasharray":".5 1","stroke-linecap":"round","filter":null,"mask":null},"#searoutes":{"opacity":0.8,"stroke":"#5e1865","stroke-width":0.6,"stroke-dasharray":"1.2 2.4","stroke-linecap":"round","filter":null,"mask":null},"#regions":{"opacity":0.4,"filter":"url(#dropShadow)"},"#statesHalo":{"opacity":1,"data-width":10.2,"stroke-width":10.2},"#provs":{"opacity":0.7,"fill":"#000000","data-size":10,"font-size":10,"font-family":"Georgia","data-font":"Georgia","filter":null},"#temperature":{"opacity":1,"font-size":"11px","fill":"#62001b","fill-opacity":0.3,"stroke":null,"stroke-width":2,"stroke-dasharray":2,"stroke-linecap":null,"filter":null},"#ice":{"opacity":0.9,"fill":"#e8f0f6","stroke":"#e8f0f6","stroke-width":1,"filter":"url(#dropShadow05)"},"#emblems": {"opacity":0.6,"stroke-width":0.5,"filter":null},"#texture":{"opacity":null,"filter":null,"mask":"url(#land)"},"#textureImage":{"x":0,"y":0},"#zones":{"opacity":0.5,"stroke":"#333333","stroke-width":0,"stroke-dasharray":null,"stroke-linecap":"butt","filter":"url(#dropShadow01)","mask":null},"#ocean":{"opacity":1},"#oceanLayers":{"filter":null,"layers":"-6,-4,-2"},"#oceanBase":{"fill":"#4e6964"},"#oceanPattern":{"opacity":0.2},"#oceanicPattern":{"href":"./images/pattern3.jpg"},"#terrs":{"opacity":1,"scheme":"bright","terracing":0,"skip":0,"relax":1,"curve":1,"filter":"url(#filter-grayscale)","mask":"url(#land)"},"#legend":{"data-size":13,"font-size":13,"data-font":"Almendra+SC","font-family":"Almendra SC","stroke":"#812929","stroke-width":2.5,"stroke-dasharray":"0 4 10 4","stroke-linecap":"round","data-x":99,"data-y":93,"data-columns":8},"#legendBox":{},"#burgLabels > #cities":{"opacity":1,"fill":"#3e3e4b","data-size":7,"font-size":7,"data-font":"Bitter","font-family":"Bitter"},"#burgIcons > #cities":{"opacity":1,"fill":"#ffffff","fill-opacity":0.7,"size":2,"stroke":"#444444","stroke-width":0.25,"stroke-dasharray":"","stroke-linecap":"butt"},"#anchors > #cities":{"opacity":0.8,"fill":"#ffffff","size":4,"stroke":"#3e3e4b","stroke-width":1},"#burgLabels > #towns":{"opacity":1,"fill":"#3e3e4b","data-size":3,"font-size":3,"data-font":"Bitter","font-family":"Bitter"},"#burgIcons > #towns":{"opacity":0.95,"fill":"#ffffff","fill-opacity":0.7,"size":0.8,"stroke":"#3e3e4b","stroke-width":0.2,"stroke-dasharray":"","stroke-linecap":"butt"},"#anchors > #towns":{"opacity":1,"fill":"#ffffff","size":1.6,"stroke":"#3e3e4b","stroke-width":1.2},"#labels > #states":{"opacity":1,"fill":"#4e4e4e","stroke":"#b5b5b5","stroke-width":0,"data-size":22,"font-size":22,"data-font":"Almendra+SC","font-family":"Almendra SC","filter":""},"#labels > #addedLabels":{"opacity":1,"fill":"#3e3e4b","stroke":"#3a3a3a","stroke-width":0,"data-size":18,"font-size":18,"data-font":"Almendra+SC","font-family":"Almendra SC","filter":null},"#fogging":{"opacity":0.98,"fill":"#1b1423","filter":null}}`,
+  styleClean: `{"#map":{"background-color":"#000000","filter":null,"data-filter":null},"#armies":{"font-size":6,"box-size":3,"stroke":"#000","stroke-width":0,"opacity":1,"fill-opacity":1,"filter":null},"#biomes":{"opacity":0.5,"filter":"url(#blur7)","mask":"url(#land)"},"#stateBorders":{"opacity":0.8,"stroke":"#414141","stroke-width":0.7,"stroke-dasharray":0,"stroke-linecap":"butt","filter":""},"#provinceBorders":{"opacity":0.8,"stroke":"#414141","stroke-width":0.45,"stroke-dasharray":1,"stroke-linecap":"butt","filter":null},"#cells":{"opacity":null,"stroke":"#808080","stroke-width":0.09,"filter":null,"mask":"url(#land)"},"#gridOverlay":{"opacity":0.8,"scale":1,"dx":0,"dy":"0","type":"pointyHex","stroke":"#808080","stroke-width":0.5,"stroke-dasharray":null,"stroke-linecap":null,"transform":null,"filter":null,"mask":null},"#coordinates":{"opacity":1,"data-size":12,"font-size":12,"stroke":"#414141","stroke-width":0.45,"stroke-dasharray":3,"stroke-linecap":null,"filter":null,"mask":null},"#compass":{"opacity":0.8,"transform":null,"filter":null,"mask":"url(#water)","shape-rendering":"optimizespeed"},"#rose":{"transform":null},"#relig":{"opacity":0.7,"stroke":"#404040","stroke-width":0.7,"filter":null},"#cults":{"opacity":0.6,"stroke":"#777777","stroke-width":0.5,"stroke-dasharray":null,"stroke-linecap":null,"filter":null},"#landmass":{"opacity":1,"fill":"#eeedeb","filter":null},"#markers":{"opacity":null,"rescale":null,"filter":"url(#dropShadow01)"},"#prec":{"opacity":null,"stroke":"#000000","stroke-width":0,"fill":"#0080ff","filter":null},"#population":{"opacity":null,"stroke-width":2.58,"stroke-dasharray":0,"stroke-linecap":"butt","filter":"url(#blur3)"},"#rural":{"stroke":"#ff0000"},"#urban":{"stroke":"#800000"},"#freshwater":{"opacity":0.5,"fill":"#aadaff","stroke":"#5f799d","stroke-width":0,"filter":null},"#salt":{"opacity":0.5,"fill":"#409b8a","stroke":"#388985","stroke-width":0.7,"filter":null},"#sinkhole":{"opacity":1,"fill":"#5bc9fd","stroke":"#53a3b0","stroke-width":0.7,"filter":null},"#frozen":{"opacity":0.95,"fill":"#cdd4e7","stroke":"#cfe0eb","stroke-width":0,"filter":null},"#lava":{"opacity":0.7,"fill":"#90270d","stroke":"#f93e0c","stroke-width":2,"filter":"url(#crumpled)"},"#dry":{"opacity":0.7,"fill":"#c9bfa7","stroke":"#8e816f","stroke-width":0.7,"filter":null},"#sea_island":{"opacity":0.6,"stroke":"#595959","stroke-width":0.4,"filter":"","auto-filter":0},"#lake_island":{"opacity":0,"stroke":"#7c8eaf","stroke-width":0,"filter":null},"#terrain":{"opacity":null,"set":"simple","size":1,"density":0.4,"filter":null,"mask":null},"#rivers":{"opacity":null,"filter":null,"fill":"#aadaff"},"#ruler":{"opacity":null,"filter":null},"#roads":{"opacity":0.9,"stroke":"#f6d068","stroke-width":0.7,"stroke-dasharray":0,"stroke-linecap":"inherit","filter":null,"mask":null},"#trails":{"opacity":1,"stroke":"#ffffff","stroke-width":0.25,"stroke-dasharray":"","stroke-linecap":"round","filter":null,"mask":null},"#searoutes":{"opacity":0.8,"stroke":"#4f82c6","stroke-width":0.45,"stroke-dasharray":2,"stroke-linecap":"butt","filter":null,"mask":"url(#water)"},"#regions":{"opacity":0.4,"filter":null},"#statesHalo":{"opacity":0,"data-width":null,"stroke-width":0},"#provs":{"opacity":0.7,"fill":"#000000","data-size":10,"font-size":10,"font-family":"Georgia","data-font":"Georgia","filter":null},"#temperature":{"opacity":null,"font-size":"8px","fill":"#000000","fill-opacity":0.3,"stroke":null,"stroke-width":1.8,"stroke-dasharray":null,"stroke-linecap":null,"filter":null},"#ice":{"opacity":0.9,"fill":"#e8f0f6","stroke":"#e8f0f6","stroke-width":1,"filter":"url(#dropShadow01)"},"#emblems":{"opacity":1,"stroke-width":1,"filter":null},"#texture":{"opacity":null,"filter":null,"mask":"url(#land)"},"#textureImage":{},"#zones":{"opacity":0.7,"stroke":"#ff6262","stroke-width":0,"stroke-dasharray":"","stroke-linecap":"butt","filter":null,"mask":null},"#ocean":{"opacity":null},"#oceanLayers":{"filter":"","layers":"none"},"#oceanBase":{"fill":"#aadaff"},"#oceanPattern":{"opacity":0.2},"#oceanicPattern":{"href":""},"#terrs":{"opacity":0.5,"scheme":"bright","terracing":0,"skip":5,"relax":0,"curve":0,"filter":"","mask":"url(#land)"},"#legend":{"data-size":12.74,"font-size":12.74,"data-font":"Arial","font-family":"Arial","stroke":"#909090","stroke-width":1.13,"stroke-dasharray":0,"stroke-linecap":"round","data-x":98.39,"data-y":12.67,"data-columns":null},"#legendBox":{},"#burgLabels > #cities":{"opacity":1,"fill":"#414141","data-size":7,"font-size":7,"data-font":"Arial","font-family":"Arial"},"#burgIcons > #cities":{"opacity":1,"fill":"#ffffff","fill-opacity":0.7,"size":1,"stroke":"#3e3e4b","stroke-width":0.24,"stroke-dasharray":"","stroke-linecap":"butt"},"#anchors > #cities":{"opacity":1,"fill":"#ffffff","size":2,"stroke":"#303030","stroke-width":1.7},"#burgLabels > #towns":{"opacity":1,"fill":"#414141","data-size":3,"font-size":3,"data-font":"Arial","font-family":"Arial"},"#burgIcons > #towns":{"opacity":1,"fill":"#ffffff","fill-opacity":0.7,"size":0.5,"stroke":"#3e3e4b","stroke-width":0.12,"stroke-dasharray":"","stroke-linecap":"butt"},"#anchors > #towns":{"opacity":1,"fill":"#ffffff","size":1,"stroke":"#3e3e4b","stroke-width":1.06},"#labels > #states":{"opacity":1,"fill":"#292929","stroke":"#303030","stroke-width":0,"data-size":10,"font-size":10,"data-font":"Arial","font-family":"Arial","filter":null},"#labels > #addedLabels":{"opacity":1,"fill":"#414141","stroke":"#3a3a3a","stroke-width":0,"data-size":18,"font-size":18,"data-font":"Arial","font-family":"Arial","filter":null},"#fogging":{"opacity":1,"fill":"#ffffff","filter":null}}`,
+  styleMonochrome: `{"#map":{"background-color":"#000000","filter":"url(#filter-grayscale)","data-filter":"grayscale"},"#armies":{"font-size":6,"box-size":3,"stroke":"#000","stroke-width":0.3,"opacity":1,"fill-opacity":1,"filter":null},"#biomes":{"opacity":null,"filter":"url(#blur5)","mask":null},"#stateBorders":{"opacity":1,"stroke":"#56566d","stroke-width":1,"stroke-dasharray":2,"stroke-linecap":"butt","filter":null},"#provinceBorders":{"opacity":1,"stroke":"#56566d","stroke-width":0.4,"stroke-dasharray":1,"stroke-linecap":"butt","filter":null},"#cells":{"opacity":null,"stroke":"#808080","stroke-width":0.1,"filter":null,"mask":null},"#gridOverlay":{"opacity":0.8,"scale":1,"dx":0,"dy":"0","type":"pointyHex","stroke":"#808080","stroke-width":0.5,"stroke-dasharray":null,"stroke-linecap":null,"transform":null,"filter":null,"mask":null},"#coordinates":{"opacity":1,"data-size":12,"font-size":12,"stroke":"#d4d4d4","stroke-width":1,"stroke-dasharray":5,"stroke-linecap":null,"filter":null,"mask":null},"#compass":{"opacity":0.8,"transform":null,"filter":null,"mask":"url(#water)","shape-rendering":"optimizespeed"},"#rose":{"transform":null},"#relig":{"opacity":0.7,"stroke":"#404040","stroke-width":0.7,"filter":null},"#cults":{"opacity":0.6,"stroke":"#777777","stroke-width":0.5,"stroke-dasharray":null,"stroke-linecap":null,"filter":null},"#landmass":{"opacity":1,"fill":"#000000","filter":null},"#markers":{"opacity":null,"rescale":1,"filter":"url(#dropShadow01)"},"#prec":{"opacity":null,"stroke":"#000000","stroke-width":0.1,"fill":"#003dff","filter":null},"#population":{"opacity":null,"stroke-width":1.6,"stroke-dasharray":null,"stroke-linecap":"butt","filter":null},"#rural":{"stroke":"#0000ff"},"#urban":{"stroke":"#ff0000"},"#freshwater":{"opacity":1,"fill":"#000000","stroke":"#515151","stroke-width":0,"filter":null},"#salt":{"opacity":1,"fill":"#000000","stroke":"#484848","stroke-width":0,"filter":null},"#sinkhole":{"opacity":1,"fill":"#000000","stroke":"#5f5f5f","stroke-width":0.5,"filter":null},"#frozen":{"opacity":1,"fill":"#000000","stroke":"#6f6f6f","stroke-width":0,"filter":null},"#lava":{"opacity":1,"fill":"#000000","stroke":"#5d5d5d","stroke-width":0,"filter":""},"#sea_island":{"opacity":1,"stroke":"#1f3846","stroke-width":0,"filter":"","auto-filter":0},"#lake_island":{"opacity":0,"stroke":"#7c8eaf","stroke-width":0,"filter":null},"#terrain":{"opacity":null,"set":"simple","size":1,"density":0.4,"filter":null,"mask":null},"#rivers":{"opacity":0.2,"filter":"url(#blur1)","fill":"#000000"},"#ruler":{"opacity":null,"filter":null},"#roads":{"opacity":0.9,"stroke":"#d06324","stroke-width":0.7,"stroke-dasharray":2,"stroke-linecap":"butt","filter":null,"mask":null},"#trails":{"opacity":0.9,"stroke":"#d06324","stroke-width":0.25,"stroke-dasharray":".8 1.6","stroke-linecap":"butt","filter":null,"mask":null},"#searoutes":{"opacity":0.8,"stroke":"#ffffff","stroke-width":0.45,"stroke-dasharray":"1 2","stroke-linecap":"round","filter":null,"mask":null},"#regions":{"opacity":0.4,"filter":null},"#statesHalo":{"opacity":1,"data-width":10,"stroke-width":10},"#provs":{"opacity":0.7,"fill":"#000000","data-size":10,"font-size":10,"font-family":"Georgia","data-font":"Georgia","filter":null},"#temperature":{"opacity":null,"font-size":"8px","fill":"#000000","fill-opacity":0.3,"stroke":null,"stroke-width":1.8,"stroke-dasharray":null,"stroke-linecap":null,"filter":null},"#ice":{"opacity":0.9,"fill":"#e8f0f6","stroke":"#e8f0f6","stroke-width":1,"filter":"url(#dropShadow05)"},"#texture":{"opacity":1,"filter":null,"mask":"url(#land)"},"#emblems": {"opacity": 0.5,"stroke-width": 0.5,"filter": null},"#textureImage":{},"#zones":{"opacity":0.6,"stroke":"#333333","stroke-width":0,"stroke-dasharray":null,"stroke-linecap":"butt","filter":null,"mask":null},"#ocean":{"opacity":0},"#oceanLayers":{"filter":null,"layers":"none"},"#oceanBase":{"fill":"#000000"},"#oceanPattern":{"opacity":0.2},"#oceanicPattern":{"href":""},"#terrs":{"opacity":1,"scheme":"monochrome","terracing":0,"skip":5,"relax":0,"curve":0,"filter":"url(#blur3)","mask":"url(#land)"},"#legend":{"data-size":13,"font-size":13,"data-font":"Almendra+SC","font-family":"Almendra SC","stroke":"#812929","stroke-width":2.5,"stroke-dasharray":"0 4 10 4","stroke-linecap":"round","data-x":99,"data-y":93,"data-columns":8},"#legendBox":{},"#burgLabels > #cities":{"opacity":1,"fill":"#3e3e4b","data-size":7,"font-size":7,"data-font":"Almendra+SC","font-family":"Almendra SC"},"#burgIcons > #cities":{"opacity":1,"fill":"#ffffff","fill-opacity":0.7,"size":1,"stroke":"#3e3e4b","stroke-width":0.24,"stroke-dasharray":"","stroke-linecap":"butt"},"#anchors > #cities":{"opacity":1,"fill":"#ffffff","size":2,"stroke":"#3e3e4b","stroke-width":1.2},"#burgLabels > #towns":{"opacity":1,"fill":"#3e3e4b","data-size":4,"font-size":4,"data-font":"Almendra+SC","font-family":"Almendra SC"},"#burgIcons > #towns":{"opacity":1,"fill":"#ffffff","fill-opacity":0.7,"size":0.5,"stroke":"#3e3e4b","stroke-width":0.12,"stroke-dasharray":"","stroke-linecap":"butt"},"#anchors > #towns":{"opacity":1,"fill":"#ffffff","size":1,"stroke":"#3e3e4b","stroke-width":1.2},"#labels > #states":{"opacity":1,"fill":"#3e3e4b","stroke":"#3a3a3a","stroke-width":0,"data-size":22,"font-size":22,"data-font":"Almendra+SC","font-family":"Almendra SC","filter":null},"#labels > #addedLabels":{"opacity":1,"fill":"#3e3e4b","stroke":"#3a3a3a","stroke-width":0,"data-size":18,"font-size":18,"data-font":"Almendra+SC","font-family":"Almendra SC","filter":null},"#fogging":{"opacity":0.98,"fill":"#30426f","filter":null}}`
 }
 
 // apply default or custom style settings on load
 function applyStyleOnLoad() {
-  addDefaulsStyles(); // add FMG system styles to localStorage
-  svg.select("defs").append("style").text(armiesStyle()); // add armies style
-
   const preset = localStorage.getItem("presetStyle");
-  const style = preset ? localStorage.getItem(preset) : null;
+  const style = preset && (defaultStyles[preset] || localStorage.getItem(preset));
 
   if (preset && style && JSON.isValid(style)) {
     applyStyle(JSON.parse(style));
@@ -683,31 +706,10 @@ function applyStyleOnLoad() {
     stylePreset.value = preset;
     stylePreset.dataset.old = preset;
   } else {
+    if (preset && preset !== "styleDefault" && ERROR) console.error(`Style preset ${preset} is not available in localStorage, applying default style`);
     stylePreset.value = "styleDefault";
     stylePreset.dataset.old = preset;
     applyDefaultStyle();
-  }
-}
-
-function addDefaulsStyles() {
-  if (!localStorage.getItem("styleClean")) {
-    const clean = `{"#map":{"background-color":"#000000","filter":null,"data-filter":null},"#armies":{"font-size":6,"box-size":3,"stroke":"#000","stroke-width":0,"opacity":1,"fill-opacity":1,"filter":null},"#biomes":{"opacity":0.5,"filter":"url(#blur7)","mask":"url(#land)"},"#stateBorders":{"opacity":0.8,"stroke":"#414141","stroke-width":0.7,"stroke-dasharray":0,"stroke-linecap":"butt","filter":""},"#provinceBorders":{"opacity":0.8,"stroke":"#414141","stroke-width":0.45,"stroke-dasharray":1,"stroke-linecap":"butt","filter":null},"#cells":{"opacity":null,"stroke":"#808080","stroke-width":0.09,"filter":null,"mask":"url(#land)"},"#gridOverlay":{"opacity":0.8,"size":10,"type":"pointyHex","stroke":"#808080","stroke-width":0.5,"stroke-dasharray":null,"stroke-linecap":null,"transform":null,"filter":null,"mask":null},"#coordinates":{"opacity":1,"data-size":12,"font-size":12,"stroke":"#414141","stroke-width":0.45,"stroke-dasharray":3,"stroke-linecap":null,"filter":null,"mask":null},"#compass":{"opacity":0.8,"transform":null,"filter":null,"mask":"url(#water)","shape-rendering":"optimizespeed"},"#rose":{"transform":null},"#relig":{"opacity":0.7,"stroke":"#404040","stroke-width":0.7,"filter":null},"#cults":{"opacity":0.6,"stroke":"#777777","stroke-width":0.5,"stroke-dasharray":null,"stroke-linecap":null,"filter":null},"#landmass":{"opacity":1,"fill":"#eeedeb","filter":null},"#markers":{"opacity":null,"rescale":null,"filter":"url(#dropShadow01)"},"#prec":{"opacity":null,"stroke":"#000000","stroke-width":0,"fill":"#0080ff","filter":null},"#population":{"opacity":null,"stroke-width":2.58,"stroke-dasharray":0,"stroke-linecap":"butt","filter":"url(#blur3)"},"#rural":{"stroke":"#ff0000"},"#urban":{"stroke":"#800000"},"#freshwater":{"opacity":0.5,"fill":"#aadaff","stroke":"#5f799d","stroke-width":0,"filter":null},"#salt":{"opacity":0.5,"fill":"#409b8a","stroke":"#388985","stroke-width":0.7,"filter":null},"#sinkhole":{"opacity":1,"fill":"#5bc9fd","stroke":"#53a3b0","stroke-width":0.7,"filter":null},"#frozen":{"opacity":0.95,"fill":"#cdd4e7","stroke":"#cfe0eb","stroke-width":0,"filter":null},"#lava":{"opacity":0.7,"fill":"#90270d","stroke":"#f93e0c","stroke-width":2,"filter":"url(#crumpled)"},"#dry":{"opacity":0.7,"fill":"#c9bfa7","stroke":"#8e816f","stroke-width":0.7,"filter":null},"#sea_island":{"opacity":0.6,"stroke":"#595959","stroke-width":0.4,"filter":"","auto-filter":0},"#lake_island":{"opacity":0,"stroke":"#7c8eaf","stroke-width":0,"filter":null},"#terrain":{"opacity":null,"set":"simple","size":1,"density":0.4,"filter":null,"mask":null},"#rivers":{"opacity":null,"filter":null,"fill":"#aadaff"},"#ruler":{"opacity":null,"filter":null},"#roads":{"opacity":0.9,"stroke":"#f6d068","stroke-width":0.7,"stroke-dasharray":0,"stroke-linecap":"inherit","filter":null,"mask":null},"#trails":{"opacity":1,"stroke":"#ffffff","stroke-width":0.25,"stroke-dasharray":"","stroke-linecap":"round","filter":null,"mask":null},"#searoutes":{"opacity":0.8,"stroke":"#4f82c6","stroke-width":0.45,"stroke-dasharray":2,"stroke-linecap":"butt","filter":null,"mask":"url(#water)"},"#regions":{"opacity":0.4,"filter":null},"#statesHalo":{"opacity":0,"data-width":null,"stroke-width":0},"#provs":{"opacity":0.6,"filter":null},"#temperature":{"opacity":null,"font-size":"8px","fill":"#000000","fill-opacity":0.3,"stroke":null,"stroke-width":1.8,"stroke-dasharray":null,"stroke-linecap":null,"filter":null},"#ice":{"opacity":0.8,"fill":"#e8f0f6","stroke":"#e8f0f6","stroke-width":1,"filter":"url(#dropShadow01)"},"#texture":{"opacity":null,"filter":null,"mask":"url(#land)"},"#textureImage":{},"#zones":{"opacity":0.7,"stroke":"#ff6262","stroke-width":0,"stroke-dasharray":"","stroke-linecap":"butt","filter":null,"mask":null},"#ocean":{"opacity":null},"#oceanLayers":{"filter":"","layers":"none"},"#oceanBase":{"fill":"#aadaff"},"#oceanPattern":{"opacity":null},"#oceanicPattern":{"filter":"url(#emptyImage)"},"#terrs":{"opacity":0.5,"scheme":"bright","terracing":0,"skip":5,"relax":0,"curve":0,"filter":"","mask":"url(#land)"},"#legend":{"data-size":12.74,"font-size":12.74,"data-font":"Arial","font-family":"Arial","stroke":"#909090","stroke-width":1.13,"stroke-dasharray":0,"stroke-linecap":"round","data-x":98.39,"data-y":12.67,"data-columns":null},"#legendBox":{},"#burgLabels > #cities":{"opacity":1,"fill":"#414141","data-size":7,"font-size":7,"data-font":"Arial","font-family":"Arial"},"#burgIcons > #cities":{"opacity":1,"fill":"#ffffff","fill-opacity":0.7,"size":1,"stroke":"#3e3e4b","stroke-width":0.24,"stroke-dasharray":"","stroke-linecap":"butt"},"#anchors > #cities":{"opacity":1,"fill":"#ffffff","size":2,"stroke":"#303030","stroke-width":1.7},"#burgLabels > #towns":{"opacity":1,"fill":"#414141","data-size":3,"font-size":3,"data-font":"Arial","font-family":"Arial"},"#burgIcons > #towns":{"opacity":1,"fill":"#ffffff","fill-opacity":0.7,"size":0.5,"stroke":"#3e3e4b","stroke-width":0.12,"stroke-dasharray":"","stroke-linecap":"butt"},"#anchors > #towns":{"opacity":1,"fill":"#ffffff","size":1,"stroke":"#3e3e4b","stroke-width":1.06},"#labels > #states":{"opacity":1,"fill":"#292929","stroke":"#303030","stroke-width":0,"data-size":10,"font-size":10,"data-font":"Arial","font-family":"Arial","filter":null},"#labels > #addedLabels":{"opacity":1,"fill":"#414141","stroke":"#3a3a3a","stroke-width":0,"data-size":18,"font-size":18,"data-font":"Arial","font-family":"Arial","filter":null},"#fogging":{"opacity":1,"fill":"#ffffff","filter":null}}`;
-    localStorage.setItem("styleClean", clean);
-  }
-
-  if (!localStorage.getItem("styleGloom")) {
-    const gloom = `{"#map":{"background-color":"#000000","filter":null,"data-filter":null},"#armies":{"font-size":6,"box-size":3,"stroke":"#000","stroke-width":0.3,"opacity":1,"fill-opacity":1,"filter":null},"#biomes":{"opacity":null,"filter":"url(#blur5)","mask":"url(#land)"},"#stateBorders":{"opacity":1,"stroke":"#56566d","stroke-width":1,"stroke-dasharray":2,"stroke-linecap":"butt","filter":""},"#provinceBorders":{"opacity":1,"stroke":"#56566d","stroke-width":0.3,"stroke-dasharray":".7 1","stroke-linecap":"butt","filter":null},"#cells":{"opacity":null,"stroke":"#808080","stroke-width":0.1,"filter":null,"mask":null},"#gridOverlay":{"opacity":0.8,"size":10,"type":"pointyHex","stroke":"#808080","stroke-width":0.5,"stroke-dasharray":null,"stroke-linecap":null,"transform":null,"filter":null,"mask":null},"#coordinates":{"opacity":1,"data-size":14,"font-size":14,"stroke":"#4a4a4a","stroke-width":1,"stroke-dasharray":6,"stroke-linecap":null,"filter":"","mask":""},"#compass":{"opacity":0.6,"transform":null,"filter":null,"mask":"url(#water)","shape-rendering":"optimizespeed"},"#rose":{"transform":"translate(100 100) scale(0.3)"},"#relig":{"opacity":0.7,"stroke":"#404040","stroke-width":1,"filter":null},"#cults":{"opacity":0.7,"stroke":"#777777","stroke-width":1.5,"stroke-dasharray":null,"stroke-linecap":null,"filter":null},"#landmass":{"opacity":1,"fill":"#e0e0e0","filter":null},"#markers":{"opacity":0.8,"rescale":1,"filter":"url(#dropShadow05)"},"#prec":{"opacity":null,"stroke":"#000000","stroke-width":0.1,"fill":"#003dff","filter":null},"#population":{"opacity":null,"stroke-width":1.6,"stroke-dasharray":null,"stroke-linecap":"butt","filter":null},"#rural":{"stroke":"#0000aa"},"#urban":{"stroke":"#9d0000"},"#freshwater":{"opacity":0.5,"fill":"#a6c1fd","stroke":"#5f799d","stroke-width":0.7,"filter":null},"#salt":{"opacity":0.5,"fill":"#409b8a","stroke":"#388985","stroke-width":0.7,"filter":null},"#sinkhole":{"opacity":1,"fill":"#5bc9fd","stroke":"#53a3b0","stroke-width":0.7,"filter":null},"#frozen":{"opacity":0.95,"fill":"#cdd4e7","stroke":"#cfe0eb","stroke-width":0,"filter":null},"#lava":{"opacity":0.7,"fill":"#90270d","stroke":"#f93e0c","stroke-width":2,"filter":"url(#crumpled)"},"#dry":{"opacity":0.7,"fill":"#c9bfa7","stroke":"#8e816f","stroke-width":0.7,"filter":null},"#sea_island":{"opacity":0.6,"stroke":"#1f3846","stroke-width":0.7,"filter":"url(#dropShadow)","auto-filter":1},"#lake_island":{"opacity":1,"stroke":"#7c8eaf","stroke-width":0.35,"filter":null},"#terrain":{"opacity":0.9,"set":"simple","size":1,"density":0.4,"filter":null,"mask":null},"#rivers":{"opacity":null,"filter":"","fill":"#779582"},"#ruler":{"opacity":null,"filter":null},"#roads":{"opacity":1,"stroke":"#8b4418","stroke-width":0.9,"stroke-dasharray":"2 3","stroke-linecap":"round","filter":"","mask":null},"#trails":{"opacity":1,"stroke":"#844017","stroke-width":0.2,"stroke-dasharray":".5 1","stroke-linecap":"round","filter":null,"mask":null},"#searoutes":{"opacity":0.8,"stroke":"#5e1865","stroke-width":0.6,"stroke-dasharray":"1.2 2.4","stroke-linecap":"round","filter":null,"mask":null},"#regions":{"opacity":0.4,"filter":"url(#dropShadow)"},"#statesHalo":{"opacity":1,"data-width":10.2,"stroke-width":10.2},"#provs":{"opacity":0.5,"filter":""},"#temperature":{"opacity":1,"font-size":"11px","fill":"#62001b","fill-opacity":0.3,"stroke":null,"stroke-width":2,"stroke-dasharray":2,"stroke-linecap":null,"filter":null},"#ice":{"opacity":0.8,"fill":"#e8f0f6","stroke":"#e8f0f6","stroke-width":1,"filter":"url(#dropShadow05)"},"#texture":{"opacity":null,"filter":null,"mask":"url(#land)"},"#textureImage":{"x":0,"y":0},"#zones":{"opacity":0.5,"stroke":"#333333","stroke-width":0,"stroke-dasharray":null,"stroke-linecap":"butt","filter":"url(#dropShadow01)","mask":null},"#ocean":{"opacity":1},"#oceanLayers":{"filter":null,"layers":"-6,-4,-2"},"#oceanBase":{"fill":"#4e6964"},"#oceanPattern":{"opacity":null},"#oceanicPattern":{"filter":"url(#pattern3)"},"#terrs":{"opacity":1,"scheme":"bright","terracing":0,"skip":0,"relax":1,"curve":1,"filter":"url(#filter-grayscale)","mask":"url(#land)"},"#legend":{"data-size":13,"font-size":13,"data-font":"Almendra+SC","font-family":"Almendra SC","stroke":"#812929","stroke-width":2.5,"stroke-dasharray":"0 4 10 4","stroke-linecap":"round","data-x":99,"data-y":93,"data-columns":8},"#legendBox":{},"#burgLabels > #cities":{"opacity":1,"fill":"#3e3e4b","data-size":7,"font-size":7,"data-font":"Bitter","font-family":"Bitter"},"#burgIcons > #cities":{"opacity":1,"fill":"#ffffff","fill-opacity":0.7,"size":2,"stroke":"#444444","stroke-width":0.25,"stroke-dasharray":"","stroke-linecap":"butt"},"#anchors > #cities":{"opacity":0.8,"fill":"#ffffff","size":4,"stroke":"#3e3e4b","stroke-width":1},"#burgLabels > #towns":{"opacity":1,"fill":"#3e3e4b","data-size":3,"font-size":3,"data-font":"Bitter","font-family":"Bitter"},"#burgIcons > #towns":{"opacity":0.95,"fill":"#ffffff","fill-opacity":0.7,"size":0.8,"stroke":"#3e3e4b","stroke-width":0.2,"stroke-dasharray":"","stroke-linecap":"butt"},"#anchors > #towns":{"opacity":1,"fill":"#ffffff","size":1.6,"stroke":"#3e3e4b","stroke-width":1.2},"#labels > #states":{"opacity":1,"fill":"#4e4e4e","stroke":"#b5b5b5","stroke-width":0,"data-size":22,"font-size":22,"data-font":"Almendra+SC","font-family":"Almendra SC","filter":""},"#labels > #addedLabels":{"opacity":1,"fill":"#3e3e4b","stroke":"#3a3a3a","stroke-width":0,"data-size":18,"font-size":18,"data-font":"Almendra+SC","font-family":"Almendra SC","filter":null},"#fogging":{"opacity":0.98,"fill":"#1b1423","filter":null}}`;
-    localStorage.setItem("styleGloom", gloom);
-  }
-
-  if (!localStorage.getItem("styleAncient")) {
-    const ancient = `{"#map":{"background-color":"#000000","filter":"url(#filter-sepia)","data-filter":"sepia"},"#armies":{"font-size":6,"box-size":3,"stroke":"#000","stroke-width":0.05,"opacity":0.8,"fill-opacity":0.8,"filter":null},"#biomes":{"opacity":null,"filter":null,"mask":null},"#stateBorders":{"opacity":0.8,"stroke":"#56566d","stroke-width":1,"stroke-dasharray":2,"stroke-linecap":"butt","filter":null},"#provinceBorders":{"opacity":0.8,"stroke":"#56566d","stroke-width":0.2,"stroke-dasharray":1,"stroke-linecap":"butt","filter":null},"#cells":{"opacity":null,"stroke":"#808080","stroke-width":0.1,"filter":null,"mask":null},"#gridOverlay":{"opacity":0.8,"size":10,"type":"pointyHex","stroke":"#808080","stroke-width":0.5,"stroke-dasharray":null,"stroke-linecap":null,"transform":null,"filter":null,"mask":null},"#coordinates":{"opacity":1,"data-size":12,"font-size":12,"stroke":"#d4d4d4","stroke-width":1,"stroke-dasharray":5,"stroke-linecap":null,"filter":null,"mask":null},"#compass":{"opacity":0.8,"transform":null,"filter":null,"mask":"url(#water)","shape-rendering":"optimizespeed"},"#rose":{"transform":"translate(80 80) scale(.25)"},"#relig":{"opacity":0.7,"stroke":"#404040","stroke-width":0.7,"filter":null},"#cults":{"opacity":0.6,"stroke":"#777777","stroke-width":0.5,"stroke-dasharray":null,"stroke-linecap":null,"filter":null},"#landmass":{"opacity":1,"fill":"#eee9d7","filter":null},"#markers":{"opacity":null,"rescale":1,"filter":"url(#dropShadow01)"},"#prec":{"opacity":null,"stroke":"#000000","stroke-width":0.1,"fill":"#003dff","filter":null},"#population":{"opacity":null,"stroke-width":1.6,"stroke-dasharray":null,"stroke-linecap":"butt","filter":null},"#rural":{"stroke":"#0000ff"},"#urban":{"stroke":"#ff0000"},"#freshwater":{"opacity":0.5,"fill":"#a6c1fd","stroke":"#5f799d","stroke-width":0.7,"filter":null},"#salt":{"opacity":0.5,"fill":"#409b8a","stroke":"#388985","stroke-width":0.7,"filter":null},"#sinkhole":{"opacity":1,"fill":"#5bc9fd","stroke":"#53a3b0","stroke-width":0.7,"filter":null},"#frozen":{"opacity":0.95,"fill":"#cdd4e7","stroke":"#cfe0eb","stroke-width":0,"filter":null},"#lava":{"opacity":0.7,"fill":"#90270d","stroke":"#f93e0c","stroke-width":2,"filter":"url(#crumpled)"},"#dry":{"opacity":0.7,"fill":"#c9bfa7","stroke":"#8e816f","stroke-width":0.7,"filter":null},"#sea_island":{"opacity":0.5,"stroke":"#1f3846","stroke-width":0.7,"filter":"url(#dropShadow)","auto-filter":1},"#lake_island":{"opacity":1,"stroke":"#7c8eaf","stroke-width":0.35,"filter":null},"#terrain":{"opacity":null,"set":"simple","size":1,"density":0.4,"filter":null,"mask":null},"#rivers":{"opacity":null,"filter":null,"fill":"#5d97bb"},"#ruler":{"opacity":null,"filter":null},"#roads":{"opacity":0.8,"stroke":"#2e1607","stroke-width":1.23,"stroke-dasharray":3,"stroke-linecap":"inherit","filter":null,"mask":null},"#trails":{"opacity":0.8,"stroke":"#331809","stroke-width":0.5,"stroke-dasharray":"1 2","stroke-linecap":"butt","filter":null,"mask":null},"#searoutes":{"opacity":0.8,"stroke":"#ffffff","stroke-width":0.8,"stroke-dasharray":"1 2","stroke-linecap":"round","filter":null,"mask":null},"#regions":{"opacity":0.4,"filter":""},"#statesHalo":{"opacity":1,"data-width":10,"stroke-width":10},"#provs":{"opacity":0.6,"filter":null},"#temperature":{"opacity":null,"font-size":"8px","fill":"#000000","fill-opacity":0.3,"stroke":null,"stroke-width":1.8,"stroke-dasharray":null,"stroke-linecap":null,"filter":null},"#ice":{"opacity":0.7,"fill":"#e8f0f6","stroke":"#e8f0f6","stroke-width":1,"filter":"url(#outline)"},"#texture":{"opacity":null,"filter":null,"mask":"url(#land)"},"#textureImage":{},"#zones":{"opacity":0.6,"stroke":"#333333","stroke-width":0,"stroke-dasharray":null,"stroke-linecap":"butt","filter":null,"mask":null},"#ocean":{"opacity":1},"#oceanLayers":{"filter":"url(#blur5)","layers":"-6,-4,-2"},"#oceanBase":{"fill":"#a7a01f"},"#oceanPattern":{"opacity":null},"#oceanicPattern":{"filter":"url(#pattern1)"},"#terrs":{"opacity":null,"scheme":"light","terracing":0,"skip":0,"relax":0,"curve":0,"filter":null,"mask":"url(#land)"},"#legend":{"data-size":13,"font-size":13,"data-font":"Almendra+SC","font-family":"Almendra SC","stroke":"#812929","stroke-width":2.5,"stroke-dasharray":"0 4 10 4","stroke-linecap":"round","data-x":99,"data-y":93,"data-columns":8},"#legendBox":{},"#burgLabels > #cities":{"opacity":1,"fill":"#3e3e4b","data-size":8,"font-size":8,"data-font":"Almendra+SC","font-family":"Almendra SC"},"#burgIcons > #cities":{"opacity":1,"fill":"#fdfab9","fill-opacity":0.7,"size":1,"stroke":"#54251d","stroke-width":0.3,"stroke-dasharray":".3 .4","stroke-linecap":"butt"},"#anchors > #cities":{"opacity":1,"fill":"#ffffff","size":2,"stroke":"#3e3e4b","stroke-width":1.2},"#burgLabels > #towns":{"opacity":1,"fill":"#3e3e4b","data-size":4,"font-size":4,"data-font":"Almendra+SC","font-family":"Almendra SC"},"#burgIcons > #towns":{"opacity":1,"fill":"#fef4d8","fill-opacity":0.7,"size":0.5,"stroke":"#463124","stroke-width":0.12,"stroke-dasharray":"","stroke-linecap":"butt"},"#anchors > #towns":{"opacity":1,"fill":"#ffffff","size":1,"stroke":"#3e3e4b","stroke-width":1.2},"#labels > #states":{"opacity":1,"fill":"#3e3e4b","stroke":"#3a3a3a","stroke-width":0,"data-size":22,"font-size":22,"data-font":"Almendra+SC","font-family":"Almendra SC","filter":null},"#labels > #addedLabels":{"opacity":1,"fill":"#3e3e4b","stroke":"#3a3a3a","stroke-width":0,"data-size":18,"font-size":18,"data-font":"Almendra+SC","font-family":"Almendra SC","filter":null},"#fogging":{"opacity":0.98,"fill":"#30426f","filter":null}}`;
-    localStorage.setItem("styleAncient", ancient);
-  }
-
-  if (!localStorage.getItem("styleMonochrome")) {
-    const monochrome = `{"#map":{"background-color":"#000000","filter":"url(#filter-grayscale)","data-filter":"grayscale"},"#armies":{"font-size":6,"box-size":3,"stroke":"#000","stroke-width":0.3,"opacity":1,"fill-opacity":1,"filter":null},"#biomes":{"opacity":null,"filter":"url(#blur5)","mask":null},"#stateBorders":{"opacity":1,"stroke":"#56566d","stroke-width":1,"stroke-dasharray":2,"stroke-linecap":"butt","filter":null},"#provinceBorders":{"opacity":1,"stroke":"#56566d","stroke-width":0.4,"stroke-dasharray":1,"stroke-linecap":"butt","filter":null},"#cells":{"opacity":null,"stroke":"#808080","stroke-width":0.1,"filter":null,"mask":null},"#gridOverlay":{"opacity":0.8,"size":10,"type":"pointyHex","stroke":"#808080","stroke-width":0.5,"stroke-dasharray":null,"stroke-linecap":null,"transform":null,"filter":null,"mask":null},"#coordinates":{"opacity":1,"data-size":12,"font-size":12,"stroke":"#d4d4d4","stroke-width":1,"stroke-dasharray":5,"stroke-linecap":null,"filter":null,"mask":null},"#compass":{"opacity":0.8,"transform":null,"filter":null,"mask":"url(#water)","shape-rendering":"optimizespeed"},"#rose":{"transform":null},"#relig":{"opacity":0.7,"stroke":"#404040","stroke-width":0.7,"filter":null},"#cults":{"opacity":0.6,"stroke":"#777777","stroke-width":0.5,"stroke-dasharray":null,"stroke-linecap":null,"filter":null},"#landmass":{"opacity":1,"fill":"#000000","filter":null},"#markers":{"opacity":null,"rescale":1,"filter":"url(#dropShadow01)"},"#prec":{"opacity":null,"stroke":"#000000","stroke-width":0.1,"fill":"#003dff","filter":null},"#population":{"opacity":null,"stroke-width":1.6,"stroke-dasharray":null,"stroke-linecap":"butt","filter":null},"#rural":{"stroke":"#0000ff"},"#urban":{"stroke":"#ff0000"},"#freshwater":{"opacity":1,"fill":"#000000","stroke":"#515151","stroke-width":0,"filter":null},"#salt":{"opacity":1,"fill":"#000000","stroke":"#484848","stroke-width":0,"filter":null},"#sinkhole":{"opacity":1,"fill":"#000000","stroke":"#5f5f5f","stroke-width":0.5,"filter":null},"#frozen":{"opacity":1,"fill":"#000000","stroke":"#6f6f6f","stroke-width":0,"filter":null},"#lava":{"opacity":1,"fill":"#000000","stroke":"#5d5d5d","stroke-width":0,"filter":""},"#sea_island":{"opacity":1,"stroke":"#1f3846","stroke-width":0,"filter":"","auto-filter":0},"#lake_island":{"opacity":0,"stroke":"#7c8eaf","stroke-width":0,"filter":null},"#terrain":{"opacity":null,"set":"simple","size":1,"density":0.4,"filter":null,"mask":null},"#rivers":{"opacity":0.2,"filter":"url(#blur1)","fill":"#000000"},"#ruler":{"opacity":null,"filter":null},"#roads":{"opacity":0.9,"stroke":"#d06324","stroke-width":0.7,"stroke-dasharray":2,"stroke-linecap":"butt","filter":null,"mask":null},"#trails":{"opacity":0.9,"stroke":"#d06324","stroke-width":0.25,"stroke-dasharray":".8 1.6","stroke-linecap":"butt","filter":null,"mask":null},"#searoutes":{"opacity":0.8,"stroke":"#ffffff","stroke-width":0.45,"stroke-dasharray":"1 2","stroke-linecap":"round","filter":null,"mask":null},"#regions":{"opacity":0.4,"filter":null},"#statesHalo":{"opacity":1,"data-width":10,"stroke-width":10},"#provs":{"opacity":0.6,"filter":null},"#temperature":{"opacity":null,"font-size":"8px","fill":"#000000","fill-opacity":0.3,"stroke":null,"stroke-width":1.8,"stroke-dasharray":null,"stroke-linecap":null,"filter":null},"#ice":{"opacity":0.8,"fill":"#e8f0f6","stroke":"#e8f0f6","stroke-width":1,"filter":"url(#dropShadow05)"},"#texture":{"opacity":1,"filter":null,"mask":"url(#land)"},"#textureImage":{},"#zones":{"opacity":0.6,"stroke":"#333333","stroke-width":0,"stroke-dasharray":null,"stroke-linecap":"butt","filter":null,"mask":null},"#ocean":{"opacity":0},"#oceanLayers":{"filter":null,"layers":"none"},"#oceanBase":{"fill":"#000000"},"#oceanPattern":{"opacity":null},"#oceanicPattern":{"filter":"url(#emptyImage)"},"#terrs":{"opacity":1,"scheme":"monochrome","terracing":0,"skip":5,"relax":0,"curve":0,"filter":"url(#blur3)","mask":"url(#land)"},"#legend":{"data-size":13,"font-size":13,"data-font":"Almendra+SC","font-family":"Almendra SC","stroke":"#812929","stroke-width":2.5,"stroke-dasharray":"0 4 10 4","stroke-linecap":"round","data-x":99,"data-y":93,"data-columns":8},"#legendBox":{},"#burgLabels > #cities":{"opacity":1,"fill":"#3e3e4b","data-size":7,"font-size":7,"data-font":"Almendra+SC","font-family":"Almendra SC"},"#burgIcons > #cities":{"opacity":1,"fill":"#ffffff","fill-opacity":0.7,"size":1,"stroke":"#3e3e4b","stroke-width":0.24,"stroke-dasharray":"","stroke-linecap":"butt"},"#anchors > #cities":{"opacity":1,"fill":"#ffffff","size":2,"stroke":"#3e3e4b","stroke-width":1.2},"#burgLabels > #towns":{"opacity":1,"fill":"#3e3e4b","data-size":4,"font-size":4,"data-font":"Almendra+SC","font-family":"Almendra SC"},"#burgIcons > #towns":{"opacity":1,"fill":"#ffffff","fill-opacity":0.7,"size":0.5,"stroke":"#3e3e4b","stroke-width":0.12,"stroke-dasharray":"","stroke-linecap":"butt"},"#anchors > #towns":{"opacity":1,"fill":"#ffffff","size":1,"stroke":"#3e3e4b","stroke-width":1.2},"#labels > #states":{"opacity":1,"fill":"#3e3e4b","stroke":"#3a3a3a","stroke-width":0,"data-size":22,"font-size":22,"data-font":"Almendra+SC","font-family":"Almendra SC","filter":null},"#labels > #addedLabels":{"opacity":1,"fill":"#3e3e4b","stroke":"#3a3a3a","stroke-width":0,"data-size":18,"font-size":18,"data-font":"Almendra+SC","font-family":"Almendra SC","filter":null},"#fogging":{"opacity":0.98,"fill":"#30426f","filter":null}}`;
-    localStorage.setItem("styleMonochrome", monochrome);
   }
 }
 
@@ -716,17 +718,17 @@ function applyDefaultStyle() {
   armies.attr("opacity", 1).attr("fill-opacity", 1).attr("font-size", 6).attr("box-size", 3).attr("stroke", "#000").attr("stroke-width", .3);
 
   biomes.attr("opacity", null).attr("filter", null).attr("mask", null);
-  ice.attr("opacity", .8).attr("fill", "#e8f0f6").attr("stroke", "#e8f0f6").attr("stroke-width", 1).attr("filter", "url(#dropShadow05)");
+  ice.attr("opacity", .9).attr("fill", "#e8f0f6").attr("stroke", "#e8f0f6").attr("stroke-width", 1).attr("filter", "url(#dropShadow05)");
   stateBorders.attr("opacity", .8).attr("stroke", "#56566d").attr("stroke-width", 1).attr("stroke-dasharray", "2").attr("stroke-linecap", "butt").attr("filter", null);
-  provinceBorders.attr("opacity", .8).attr("stroke", "#56566d").attr("stroke-width", .2).attr("stroke-dasharray", "1").attr("stroke-linecap", "butt").attr("filter", null);
+  provinceBorders.attr("opacity", .8).attr("stroke", "#56566d").attr("stroke-width", .5).attr("stroke-dasharray", "0 2").attr("stroke-linecap", "round").attr("filter", null);
   cells.attr("opacity", null).attr("stroke", "#808080").attr("stroke-width", .1).attr("filter", null).attr("mask", null);
 
-  gridOverlay.attr("opacity", .8).attr("type", "pointyHex").attr("size", 10).attr("stroke", "#808080").attr("stroke-width", .5).attr("stroke-dasharray", null).attr("transform", null).attr("filter", null).attr("mask", null);
+  gridOverlay.attr("opacity", .8).attr("type", "pointyHex").attr("scale", 1).attr("dx", 0).attr("dy", 0).attr("stroke", "#777777").attr("stroke-width", .5).attr("stroke-dasharray", null).attr("filter", null).attr("mask", null);
   coordinates.attr("opacity", 1).attr("data-size", 12).attr("font-size", 12).attr("stroke", "#d4d4d4").attr("stroke-width", 1).attr("stroke-dasharray", 5).attr("filter", null).attr("mask", null);
   compass.attr("opacity", .8).attr("transform", null).attr("filter", null).attr("mask", "url(#water)").attr("shape-rendering", "optimizespeed");
   if (!d3.select("#initial").size()) d3.select("#rose").attr("transform", "translate(80 80) scale(.25)");
 
-  relig.attr("opacity", .7).attr("stroke", null).attr("stroke-width", null).attr("filter", null);
+  relig.attr("opacity", .7).attr("stroke", "#777777").attr("stroke-width", 0).attr("filter", null);
   cults.attr("opacity", .6).attr("stroke", "#777777").attr("stroke-width", .5).attr("filter", null);
   landmass.attr("opacity", 1).attr("fill", "#eef6fb").attr("filter", null);
   markers.attr("opacity", null).attr("rescale", 1).attr("filter", "url(#dropShadow01)");
@@ -756,7 +758,7 @@ function applyDefaultStyle() {
 
   regions.attr("opacity", .4).attr("filter", null);
   statesHalo.attr("data-width", 10).attr("stroke-width", 10).attr("opacity", 1);
-  provs.attr("opacity", .6).attr("filter", null);
+  provs.attr("opacity", .7).attr("fill", "#000000").attr("font-family", "Georgia").attr("data-font", "Georgia").attr("data-size", 10).attr("font-size", 10).attr("filter", null);
 
   temperature.attr("opacity", null).attr("fill", "#000000").attr("stroke-width", 1.8).attr("fill-opacity", .3).attr("font-size", "8px").attr("stroke-dasharray", null).attr("filter", null).attr("mask", null);
   texture.attr("opacity", null).attr("filter", null).attr("mask", "url(#land)");
@@ -765,11 +767,10 @@ function applyDefaultStyle() {
 
   // ocean and svg default style
   svg.attr("background-color", "#000000").attr("data-filter", null).attr("filter", null);
-  ocean.attr("opacity", null);
   oceanLayers.select("rect").attr("fill", "#466eab"); // old color #53679f
   oceanLayers.attr("filter", null).attr("layers", "-6,-3,-1");
-  oceanPattern.attr("opacity", null);
-  svg.select("#oceanicPattern").attr("filter", "url(#pattern1)");
+  oceanPattern.attr("opacity", .2);
+  svg.select("#oceanicPattern").attr("href", "./images/pattern1.png");
 
   // heightmap style
   terrs.attr("opacity", null).attr("filter", null).attr("mask", "url(#land)").attr("stroke", "none")
@@ -795,6 +796,7 @@ function applyDefaultStyle() {
   labels.select("#addedLabels").attr("fill", "#3e3e4b").attr("opacity", 1).attr("stroke", "#3a3a3a").attr("stroke-width", 0).attr("font-family", "Almendra SC").attr("data-font", "Almendra+SC").attr("font-size", 18).attr("data-size", 18).attr("filter", null);
 
   fogging.attr("opacity", .98).attr("fill", "#30426f");
+  emblems.attr("opacity", .9).attr("stroke-width", 1).attr("filter", null);
 }
 
 // apply style settings in JSON
@@ -817,10 +819,16 @@ function changeStylePreset(preset) {
   $("#alert").dialog({resizable: false, title: "Change style preset", width: "23em",
     buttons: {
       Change: function() {
-        const stored = localStorage.getItem(preset);
-        const style = JSON.isValid(stored) ? JSON.parse(stored) : null;
-        if (preset === "styleDefault" || !style) applyDefaultStyle(); else applyStyle(style);
-        if (preset !== "styleDefault" && !style) tip("Cannot parse stored style JSON. Default style is applied", false, "error", 5000);
+        const customPreset = localStorage.getItem(preset);
+        if (customPreset) {
+          if (JSON.isValid(customPreset)) applyStyle(JSON.parse(customPreset));
+          else {
+            tip("Cannot parse stored style JSON. Default style applied", false, "error", 5000);
+            applyDefaultStyle();
+          }
+        } else if (defaultStyles[preset]) applyStyle(JSON.parse(defaultStyles[preset]));
+        else applyDefaultStyle();
+
         removeStyleButton.style.display = stylePreset.selectedOptions[0].dataset.system ? "none" : "inline-block";
         updateElements(); // change elements
         selectStyleElement(); // re-select element to trigger values update
@@ -893,7 +901,7 @@ function addStylePreset() {
       "#stateBorders":["opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "filter"],
       "#provinceBorders":["opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "filter"],
       "#cells":["opacity", "stroke", "stroke-width", "filter", "mask"],
-      "#gridOverlay":["opacity", "size", "type", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "transform", "filter", "mask"],
+      "#gridOverlay":["opacity", "scale", "dx", "dy", "type", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "transform", "filter", "mask"],
       "#coordinates":["opacity", "data-size", "font-size", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "filter", "mask"],
       "#compass":["opacity", "transform", "filter", "mask", "shape-rendering"],
       "#rose":["transform"],
@@ -921,17 +929,17 @@ function addStylePreset() {
       "#searoutes":["opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "filter", "mask"],
       "#regions":["opacity", "filter"],
       "#statesHalo":["opacity", "data-width", "stroke-width"],
-      "#provs":["opacity", "filter"],
+      "#provs":["opacity", "fill", "font-size", "data-font", "font-family", "filter"],
       "#temperature":["opacity", "font-size", "fill", "fill-opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "filter"],
       "#ice":["opacity", "fill", "stroke", "stroke-width", "filter"],
+      "#emblems":["opacity", "stroke-width", "filter"],
       "#texture":["opacity", "filter", "mask"],
       "#textureImage":["x", "y"],
       "#zones":["opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "filter", "mask"],
-      "#ocean":["opacity"],
       "#oceanLayers":["filter", "layers"],
       "#oceanBase":["fill"],
       "#oceanPattern":["opacity"],
-      "#oceanicPattern":["filter"],
+      "#oceanicPattern":["href"],
       "#terrs":["opacity", "scheme", "terracing", "skip", "relax", "curve", "filter", "mask"],
       "#legend":["data-size", "font-size", "data-font", "font-family", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "data-x", "data-y", "data-columns"],
       "#legendBox":["fill", "fill-opacity"],
@@ -1094,7 +1102,7 @@ function addFonts(url) {
         let family = rule.style.getPropertyValue('font-family');
         let font = family.replace(/['"]+/g, '').replace(/ /g, "+");
         let weight = rule.style.getPropertyValue('font-weight');
-        if (weight !== "400") font += ":" + weight;
+        if (weight && weight !== "400") font += ":" + weight;
         if (fonts.indexOf(font) == -1) {
           fonts.push(font);
           fetched++

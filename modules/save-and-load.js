@@ -3,21 +3,20 @@
 
 // download map as SVG
 async function saveSVG() {
-  console.time("saveSVG");
+  TIME && console.time("saveSVG");
   const url = await getMapURL("svg");
   const link = document.createElement("a");
   link.download = getFileName() + ".svg";
   link.href = url;
-  document.body.appendChild(link);
   link.click();
 
   tip(`${link.download} is saved. Open "Downloads" screen (crtl + J) to check. You can set image scale in options`, true, "success", 5000);
-  console.timeEnd("saveSVG");
+  TIME && console.timeEnd("saveSVG");
 }
 
 // download map as PNG
 async function savePNG() {
-  console.time("savePNG");
+  TIME && console.time("savePNG");
   const url = await getMapURL("png");
 
   const link = document.createElement("a");
@@ -33,7 +32,6 @@ async function savePNG() {
     link.download = getFileName() + ".png";
     canvas.toBlob(function(blob) {
         link.href = window.URL.createObjectURL(blob);
-        document.body.appendChild(link);
         link.click();
         window.setTimeout(function() {
           canvas.remove();
@@ -43,12 +41,12 @@ async function savePNG() {
     });
   }
 
-  console.timeEnd("savePNG");
+  TIME && console.timeEnd("savePNG");
 }
 
 // download map as JPEG
 async function saveJPEG() {
-  console.time("saveJPEG");
+  TIME && console.time("saveJPEG");
   const url = await getMapURL("png");
 
   const canvas = document.createElement("canvas");
@@ -64,13 +62,12 @@ async function saveJPEG() {
     const link = document.createElement("a");
     link.download = getFileName() + ".jpeg";
     link.href = URL;
-    document.body.appendChild(link);
     link.click();
     tip(`${link.download} is saved. Open "Downloads" screen (CTRL + J) to check`, true, "success", 7000);
     window.setTimeout(() => window.URL.revokeObjectURL(URL), 5000);
   }
 
-  console.timeEnd("saveJPEG");
+  TIME && console.timeEnd("saveJPEG");
 }
 
 // parse map svg to object url
@@ -81,10 +78,16 @@ async function getMapURL(type, subtype) {
   const clone = d3.select(cloneEl);
   clone.select("#debug").remove();
 
+  const cloneDefs = cloneEl.getElementsByTagName("defs")[0];
+  const svgDefs = document.getElementById("defElements");
+
   const isFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
   if (isFirefox && type === "mesh") clone.select("#oceanPattern").remove();
   if (subtype === "globe") clone.select("#scaleBar").remove();
-  if (subtype === "noWater") {clone.select("#oceanBase").attr("opacity", 0); clone.select("#oceanPattern").attr("opacity", 0);}
+  if (subtype === "noWater") {
+    clone.select("#oceanBase").attr("opacity", 0);
+    clone.select("#oceanPattern").attr("opacity", 0);
+  }
   if (type !== "png") {
     // reset transform to show the whole map
     clone.attr("width", graphWidth).attr("height", graphHeight);
@@ -94,14 +97,104 @@ async function getMapURL(type, subtype) {
   if (customization && type === "mesh") updateMeshCells(clone);
   inlineStyle(clone);
 
-  const fontStyle = await GFontToDataURI(getFontsToLoad()); // load non-standard fonts
-  if (fontStyle) clone.select("defs").append("style").text(fontStyle.join('\n')); // add font to style
+  // remove unused filters
+  const filters = cloneEl.querySelectorAll("filter");
+  for (let i=0; i < filters.length; i++) {
+    const id = filters[i].id;
+    if (cloneEl.querySelector("[filter='url(#"+id+")']")) continue;
+    if (cloneEl.getAttribute("filter") === "url(#"+id+")") continue;
+    filters[i].remove();
+  }
 
-  clone.append("metadata").text("<dc:format>image/svg+xml</dc:format>");
-  const serialized = (new XMLSerializer()).serializeToString(clone.node());
-  const svg_xml = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>` + serialized;
+  // remove unused patterns
+  const patterns = cloneEl.querySelectorAll("pattern");
+  for (let i=0; i < patterns.length; i++) {
+    const id = patterns[i].id;
+    if (cloneEl.querySelector("[fill='url(#"+id+")']")) continue;
+    patterns[i].remove();
+  }
+
+  // remove unused symbols
+  const symbols = cloneEl.querySelectorAll("symbol");
+  for (let i=0; i < symbols.length; i++) {
+    const id = symbols[i].id;
+    if (cloneEl.querySelector("use[*|href='#"+id+"']")) continue;
+    symbols[i].remove();
+  }
+
+  // add displayed emblems
+  if (layerIsOn("toggleEmblems") && emblems.selectAll("use").size()) {
+    cloneEl.getElementById("emblems")?.querySelectorAll("use").forEach(el => {
+      const href = el.getAttribute("href") || el.getAttribute("xlink:href");
+      if (!href) return;
+      const emblem = document.getElementById(href.slice(1));
+      if (emblem) cloneDefs.append(emblem.cloneNode(true));
+    });
+  } else {
+    cloneDefs.querySelector("#defs-emblems")?.remove();
+  }
+
+  // replace ocean pattern href to base64
+  if (PRODUCTION && cloneEl.getElementById("oceanicPattern")) {
+    const el = cloneEl.getElementById("oceanicPattern");
+    const url = el.getAttribute("href");
+    await new Promise(resolve => {
+      getBase64(url, base64 => {
+        el.setAttribute("href", base64);
+        resolve();
+      });
+    });
+  }
+
+  // add relief icons
+  if (cloneEl.getElementById("terrain")) {
+    const uniqueElements = new Set();
+    const terrainNodes = cloneEl.getElementById("terrain").childNodes;
+    for (let i=0; i < terrainNodes.length; i++) {
+      const href = terrainNodes[i].getAttribute("href") || terrainNodes[i].getAttribute("xlink:href");
+      uniqueElements.add(href);
+    }
+
+    const defsRelief = svgDefs.getElementById("defs-relief");
+    for (const terrain of [...uniqueElements]) {
+      const element = defsRelief.querySelector(terrain);
+      if (element) cloneDefs.appendChild(element.cloneNode(true));
+    }
+  }
+
+  // add wind rose
+  if (cloneEl.getElementById("compass")) {
+    const rose = svgDefs.getElementById("rose");
+    if (rose) cloneDefs.appendChild(rose.cloneNode(true));
+  }
+
+  // add port icon
+  if (cloneEl.getElementById("anchors")) {
+    const anchor = svgDefs.getElementById("icon-anchor");
+    if (anchor) cloneDefs.appendChild(anchor.cloneNode(true));
+  }
+
+  // add grid pattern
+  if (cloneEl.getElementById("gridOverlay")?.hasChildNodes()) {
+    const type = cloneEl.getElementById("gridOverlay").getAttribute("type");
+    const pattern = svgDefs.getElementById("pattern_"+type);
+    if (pattern) cloneDefs.appendChild(pattern.cloneNode(true));
+  }
+
+  if (!cloneEl.getElementById("hatching").children.length) cloneEl.getElementById("hatching").remove(); //remove unused hatching group
+  if (!cloneEl.getElementById("fogging-cont")) cloneEl.getElementById("fog").remove(); //remove unused fog
+  if (!cloneEl.getElementById("regions")) cloneEl.getElementById("statePaths").remove(); // removed unused statePaths
+  if (!cloneEl.getElementById("labels")) cloneEl.getElementById("textPaths").remove(); // removed unused textPaths
+
+  // add armies style
+  if (cloneEl.getElementById("armies")) cloneEl.insertAdjacentHTML("afterbegin", "<style>#armies text {stroke: none; fill: #fff; text-shadow: 0 0 4px #000; dominant-baseline: central; text-anchor: middle; font-family: Helvetica; fill-opacity: 1;}#armies text.regimentIcon {font-size: .8em;}</style>");
+
+  const fontStyle = await GFontToDataURI(getFontsToLoad(clone)); // load non-standard fonts
+  if (fontStyle) clone.select("defs").append("style").text(fontStyle.join('\n')); // add font to style
   clone.remove();
-  const blob = new Blob([svg_xml], {type: 'image/svg+xml;charset=utf-8'});
+
+  const serialized = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>` + (new XMLSerializer()).serializeToString(cloneEl);
+  const blob = new Blob([serialized], {type: 'image/svg+xml;charset=utf-8'});
   const url = window.URL.createObjectURL(blob);
   window.setTimeout(() => window.URL.revokeObjectURL(url), 5000);
   return url;
@@ -115,7 +208,7 @@ function removeUnusedElements(clone) {
   for (let empty = 1; empty;) {
     empty = 0;
     clone.selectAll("g").each(function() {
-      if (!this.hasChildNodes() || this.style.display === "none") {empty++; this.remove();}
+      if (!this.hasChildNodes() || this.style.display === "none" || this.classList.contains("hidden")) {empty++; this.remove();}
       if (this.hasAttribute("display") && this.style.display === "inline") this.removeAttribute("display");
     });
   }
@@ -134,7 +227,7 @@ function inlineStyle(clone) {
   const emptyG = clone.append("g").node();
   const defaultStyles = window.getComputedStyle(emptyG);
 
-  clone.selectAll("g, #ruler > g > *, #scaleBar > text").each(function() {
+  clone.selectAll("g, #ruler *, #scaleBar > text").each(function() {
     const compStyle = window.getComputedStyle(this);
     let style = "";
 
@@ -154,6 +247,15 @@ function inlineStyle(clone) {
       style += key + ':' + value + ';';
     }
 
+    for (const key in compStyle) {
+      const value = compStyle.getPropertyValue(key);
+
+      if (key === "cursor") continue; // cursor should be default
+      if (this.hasAttribute(key)) continue; // don't add style if there is the same attribute
+      if (value === defaultStyles.getPropertyValue(key)) continue;
+      style += key + ':' + value + ';';
+    }
+
     if (style != "") this.setAttribute('style', style);
   });
 
@@ -161,11 +263,11 @@ function inlineStyle(clone) {
 }
 
 // get non-standard fonts used for labels to fetch them from web
-function getFontsToLoad() {
+function getFontsToLoad(clone) {
   const webSafe = ["Georgia", "Times+New+Roman", "Comic+Sans+MS", "Lucida+Sans+Unicode", "Courier+New", "Verdana", "Arial", "Impact"]; // fonts to not fetch
 
   const fontsInUse = new Set(); // to store fonts currently in use
-  labels.selectAll("g").each(function() {
+  clone.selectAll("#labels > g").each(function() {
     if (!this.hasChildNodes()) return;
     const font = this.dataset.font;
     if (!font || webSafe.includes(font)) return;
@@ -219,7 +321,7 @@ function GFontToDataURI(url) {
 
 // prepare map data for saving
 function getMapData() {
-  console.time("createMapDataBlob");
+  TIME && console.time("createMapDataBlob");
 
   return new Promise(resolve => {
     const date = new Date();
@@ -236,13 +338,19 @@ function getMapData() {
     const coords = JSON.stringify(mapCoordinates);
     const biomes = [biomesData.color, biomesData.habitability, biomesData.name].join("|");
     const notesData = JSON.stringify(notes);
+    const rulersString = rulers.toString();
 
-    const cloneEl = document.getElementById("map").cloneNode(true); // clone svg
+    // clone svg
+    const cloneEl = document.getElementById("map").cloneNode(true);
 
     // set transform values to default
     cloneEl.setAttribute("width", graphWidth);
     cloneEl.setAttribute("height", graphHeight);
     cloneEl.querySelector("#viewbox").removeAttribute("transform");
+
+    // always remove rulers
+    cloneEl.querySelector("#ruler").innerHTML = "";
+
     const svg_xml = (new XMLSerializer()).serializeToString(cloneEl);
 
     const gridGeneral = JSON.stringify({spacing:grid.spacing, cellsX:grid.cellsX, cellsY:grid.cellsY, boundary:grid.boundary, points:grid.points, features:grid.features});
@@ -271,13 +379,12 @@ function getMapData() {
       pack.cells.biome, pack.cells.burg, pack.cells.conf, pack.cells.culture, pack.cells.fl,
       pop, pack.cells.r, pack.cells.road, pack.cells.s, pack.cells.state,
       pack.cells.religion, pack.cells.province, pack.cells.crossroad, religions, provinces,
-      namesData, rivers].join("\r\n");
+      namesData, rivers, rulersString].join("\r\n");
     const blob = new Blob([data], {type: "text/plain"});
 
-    console.timeEnd("createMapDataBlob");
+    TIME && console.timeEnd("createMapDataBlob");
     resolve(blob);
   });
-
 }
 
 // Download .map file
@@ -290,123 +397,109 @@ async function saveMap() {
   const link = document.createElement("a");
   link.download = getFileName() + ".map";
   link.href = URL;
-  document.body.appendChild(link);
   link.click();
   tip(`${link.download} is saved. Open "Downloads" screen (CTRL + J) to check`, true, "success", 7000);
   window.URL.revokeObjectURL(URL);
 }
 
 function saveGeoJSON_Cells() {
-  let data = "{ \"type\": \"FeatureCollection\", \"features\": [\n";
-  const cells = pack.cells, v = pack.vertices;
+  const json = {type: "FeatureCollection", features: []};
+  const cells = pack.cells;
   const getPopulation = i => {const [r, u] = getCellPopulation(i); return rn(r+u)};
+  const getHeight = i => parseInt(getFriendlyHeight([cells.p[i][0],cells.p[i][1]]));
 
   cells.i.forEach(i => {
-    data += "{\n   \"type\": \"Feature\",\n   \"geometry\": { \"type\": \"Polygon\", \"coordinates\": [[";
-    cells.v[i].forEach(n => {
-      let x = mapCoordinates.lonW + (v.p[n][0] / graphWidth) * mapCoordinates.lonT;
-      let y = mapCoordinates.latN - (v.p[n][1] / graphHeight) * mapCoordinates.latT; // this is inverted in QGIS otherwise
-      data += "["+x+","+y+"],";
-    });
-    // close the ring
-    let x = mapCoordinates.lonW + (v.p[cells.v[i][0]][0] / graphWidth) * mapCoordinates.lonT;
-    let y = mapCoordinates.latN - (v.p[cells.v[i][0]][1] / graphHeight) * mapCoordinates.latT; // this is inverted in QGIS otherwise
-    data += "["+x+","+y+"]";
-    data += "]] },\n   \"properties\": {\n";
+    const coordinates = getCellCoordinates(cells.v[i]);
+    const height = getHeight(i);
+    const biome = cells.biome[i];
+    const type = pack.features[cells.f[i]].type;
+    const population = getPopulation(i);
+    const state = cells.state[i];
+    const province = cells.province[i];
+    const culture = cells.culture[i];
+    const religion = cells.religion[i];
+    const neighbors = cells.c[i];
 
-    const height = parseInt(getFriendlyHeight([cells.p[i][0],cells.p[i][1]]));
-
-    data += "      \"id\": \""+i+"\",\n";
-    data += "      \"height\": \""+height+"\",\n";
-    data += "      \"biome\": \""+cells.biome[i]+"\",\n";
-    data += "      \"type\": \""+pack.features[cells.f[i]].type+"\",\n";
-    data += "      \"population\": \""+getPopulation(i)+"\",\n";
-    data += "      \"state\": \""+cells.state[i]+"\",\n";
-    data += "      \"province\": \""+cells.province[i]+"\",\n";
-    data += "      \"culture\": \""+cells.culture[i]+"\",\n";
-    data += "      \"religion\": \""+cells.religion[i]+"\",\n";
-    data += "      \"neighbors\": ["+cells.c[i]+"]\n";
-    data +="   }\n},\n";
+    const properties = {id:i, height, biome, type, population, state, province, culture, religion, neighbors}
+    const feature = {type: "Feature", geometry: {type: "Polygon", coordinates}, properties};
+    json.features.push(feature);
   });
-
-  data = data.substring(0, data.length - 2)+"\n"; // remove trailing comma
-  data += "]}";
 
   const name = getFileName("Cells") + ".geojson";
-  downloadFile(data, name, "application/json");
+  downloadFile(JSON.stringify(json), name, "application/json");
 }
 
-function saveGeoJSON_Roads() {
-  let data = "{ \"type\": \"FeatureCollection\", \"features\": [\n";
+function saveGeoJSON_Routes() {
+  const json = {type: "FeatureCollection", features: []};
 
-  routes._groups[0][0].childNodes.forEach(n => {
-    n.childNodes.forEach(r => {
-      data += "{\n   \"type\": \"Feature\",\n   \"geometry\": { \"type\": \"LineString\", \"coordinates\": ";
-      data += JSON.stringify(getRoadPoints(r));
-      data += " },\n   \"properties\": {\n";
-      data += "      \"id\": \""+r.id+"\",\n";
-      data += "      \"type\": \""+n.id+"\"\n";
-      data +="   }\n},\n";
-    });
+  routes.selectAll("g > path").each(function() {
+    const coordinates = getRoutePoints(this);
+    const id = this.id;
+    const type = this.parentElement.id;
+
+    const feature = {type: "Feature", geometry: {type: "LineString", coordinates}, properties: {id, type}};
+    json.features.push(feature);
   });
-  data = data.substring(0, data.length - 2)+"\n"; // remove trailing comma
-  data += "]}";
 
   const name = getFileName("Routes") + ".geojson";
-  downloadFile(data, name, "application/json");
+  downloadFile(JSON.stringify(json), name, "application/json");
 }
 
 function saveGeoJSON_Rivers() {
-  let data = "{ \"type\": \"FeatureCollection\", \"features\": [\n";
+  const json = {type: "FeatureCollection", features: []};
 
-  rivers._groups[0][0].childNodes.forEach(n => {
-    data += "{\n   \"type\": \"Feature\",\n   \"geometry\": { \"type\": \"LineString\", \"coordinates\": ";
-    data += JSON.stringify(getRiverPoints(n));
-    data += " },\n   \"properties\": {\n";
-    data += "      \"id\": \""+n.id+"\",\n";
-    data += "      \"width\": \""+n.dataset.width+"\",\n";
-    data += "      \"increment\": \""+n.dataset.increment+"\"\n";
-    data +="   }\n},\n";
+  rivers.selectAll("path").each(function() {
+    const coordinates = getRiverPoints(this);
+    const id = this.id;
+    const width = +this.dataset.increment;
+    const increment = +this.dataset.increment;
+    const river = pack.rivers.find(r => r.i === +id.slice(5));
+    const name = river ? river.name : "";
+    const type = river ? river.type : "";
+    const i = river ? river.i : "";
+    const basin = river ? river.basin : "";
+
+    const feature = {type: "Feature", geometry: {type: "LineString", coordinates}, properties: {id, i, basin, name, type, width, increment}};
+    json.features.push(feature);
   });
-  data = data.substring(0, data.length - 2)+"\n"; // remove trailing comma
-  data += "]}";
 
   const name = getFileName("Rivers") + ".geojson";
-  downloadFile(data, name, "application/json");
+  downloadFile(JSON.stringify(json), name, "application/json");
 }
 
 function saveGeoJSON_Markers() {
-  let data = "{ \"type\": \"FeatureCollection\", \"features\": [\n";
+  const json = {type: "FeatureCollection", features: []};
 
-  markers._groups[0][0].childNodes.forEach(n => {
-      let x = mapCoordinates.lonW + (n.dataset.x / graphWidth) * mapCoordinates.lonT;
-      let y = mapCoordinates.latN - (n.dataset.y / graphHeight) * mapCoordinates.latT; // this is inverted in QGIS otherwise
+  markers.selectAll("use").each(function() {
+    const coordinates = getQGIScoordinates(this.dataset.x, this.dataset.y);
+    const id = this.id;
+    const type = (this.dataset.id).substring(1);
+    const icon = document.getElementById(type).textContent;
+    const note = notes.length ? notes.find(note => note.id === this.id) : null;
+    const name = note ? note.name : "";
+    const legend = note ? note.legend : "";
 
-      data += "{\n   \"type\": \"Feature\",\n   \"geometry\": { \"type\": \"Point\", \"coordinates\": ["+x+", "+y+"]";
-      data += " },\n   \"properties\": {\n";
-      data += "      \"id\": \""+n.id+"\",\n";
-      data += "      \"type\": \""+n.dataset.id.substring(8)+"\"\n";
-      data +="   }\n},\n";
-
+    const feature = {type: "Feature", geometry: {type: "Point", coordinates}, properties: {id, type, icon, name, legend}};
+    json.features.push(feature);
   });
-  data = data.substring(0, data.length - 2)+"\n"; // remove trailing comma
-  data += "]}";
 
   const name = getFileName("Markers") + ".geojson";
-  downloadFile(data, name, "application/json");
+  downloadFile(JSON.stringify(json), name, "application/json");
 }
 
-function getRoadPoints(node) {
+function getCellCoordinates(vertices) {
+  const p = pack.vertices.p;
+  const coordinates = vertices.map(n => getQGIScoordinates(p[n][0], p[n][1]));
+  return [coordinates.concat([coordinates[0]])];
+}
+
+function getRoutePoints(node) {
   let points = [];
   const l = node.getTotalLength();
   const increment = l / Math.ceil(l / 2);
   for (let i=0; i <= l; i += increment) {
     const p = node.getPointAtLength(i);
-
-    let x = mapCoordinates.lonW + (p.x / graphWidth) * mapCoordinates.lonT;
-    let y = mapCoordinates.latN - (p.y / graphHeight) * mapCoordinates.latT; // this is inverted in QGIS otherwise
-
-    points.push([x,y]);
+    points.push(getQGIScoordinates(p.x, p.y));
   }
   return points;
 }
@@ -418,9 +511,7 @@ function getRiverPoints(node) {
   for (let i=l, c=i; i >= 0; i -= increment, c += increment) {
     const p1 = node.getPointAtLength(i);
     const p2 = node.getPointAtLength(c);
-
-    let x = mapCoordinates.lonW + (((p1.x+p2.x)/2) / graphWidth) * mapCoordinates.lonT;
-    let y = mapCoordinates.latN - (((p1.y+p2.y)/2) / graphHeight) * mapCoordinates.latT; // this is inverted in QGIS otherwise
+    const [x, y] = getQGIScoordinates((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
     points.push([x,y]);
   }
   return points;
@@ -430,7 +521,7 @@ async function quickSave() {
   if (customization) {tip("Map cannot be saved when edit mode is active, please exit the mode and retry", false, "error"); return;}
   const blob = await getMapData();
   if (blob) ldb.set("lastMap", blob); // auto-save map
-  tip("Map is saved to browser memory", true, "success", 2000);
+  tip("Map is saved to browser memory. Please also save as .map file to secure progress", true, "success", 2000);
 }
 
 function quickLoad() {
@@ -439,7 +530,7 @@ function quickLoad() {
       loadMapPrompt(blob);
     } else {
       tip("No map stored. Save map to storage first", true, "error", 2000);
-      console.error("No map stored");
+      ERROR && console.error("No map stored");
     }
   });
 }
@@ -458,12 +549,12 @@ function loadMapPrompt(blob) {
   });
 
   function loadLastSavedMap() {
-    console.warn("Load last saved map");
+    WARN && console.warn("Load last saved map");
     try {
       uploadMap(blob);
     }
     catch(error) {
-      console.error(error);
+      ERROR && console.error(error);
       tip("Cannot load last saved map", true, "error", 2000);
     }
   }
@@ -508,6 +599,8 @@ function uploadMap(file, callback) {
   const fileReader = new FileReader();
   fileReader.onload = function(fileLoadedEvent) {
     if (callback) callback();
+    document.getElementById("coas").innerHTML = ""; // remove auto-generated emblems
+
     const dataLoaded = fileLoadedEvent.target.result;
     const data = dataLoaded.split("\r\n");
 
@@ -526,7 +619,7 @@ function uploadMap(file, callback) {
     } else {
       load = true;
       message =  `The map version (${mapVersion}) does not match the Generator version (${version}).
-                 <br>Click OK to get map auto-updated. In case of issues please keep using an ${archive} of the Generator`;
+                 <br>Click OK to get map <b>auto-updated</b>. In case of issues please keep using an ${archive} of the Generator`;
     }
     alertMessage.innerHTML = message;
     $("#alert").dialog({title: "Version conflict", width: "38em", buttons: {
@@ -555,7 +648,7 @@ function parseLoadedData(data) {
       mapId = params[6] ? +params[6] : Date.now();
     }()
 
-    console.group("Loaded Map " + seed);
+    INFO && console.group("Loaded Map " + seed);
 
     void function parseSettings() {
       const settings = data[1].split("|");
@@ -585,6 +678,7 @@ function parseLoadedData(data) {
     void function parseConfiguration() {
       if (data[2]) mapCoordinates = JSON.parse(data[2]);
       if (data[4]) notes = JSON.parse(data[4]);
+      if (data[33]) rulers.fromString(data[33]);
 
       const biomes = data[3].split("|");
       biomesData = applyDefaultBiomesSystem();
@@ -645,6 +739,7 @@ function parseLoadedData(data) {
       coastline = viewbox.select("#coastline");
       prec = viewbox.select("#prec");
       population = viewbox.select("#population");
+      emblems = viewbox.select("#emblems");
       labels = viewbox.select("#labels");
       icons = viewbox.select("#icons");
       burgIcons = icons.select("#burgIcons");
@@ -705,50 +800,49 @@ function parseLoadedData(data) {
       }
     }()
 
-    void function restoreLayersState() {
-      if (texture.style("display") !== "none" && texture.select("image").size()) turnButtonOn("toggleTexture"); else turnButtonOff("toggleTexture");
-      if (terrs.selectAll("*").size()) turnButtonOn("toggleHeight"); else turnButtonOff("toggleHeight");
-      if (biomes.selectAll("*").size()) turnButtonOn("toggleBiomes"); else turnButtonOff("toggleBiomes");
-      if (cells.selectAll("*").size()) turnButtonOn("toggleCells"); else turnButtonOff("toggleCells");
-      if (gridOverlay.selectAll("*").size()) turnButtonOn("toggleGrid"); else turnButtonOff("toggleGrid");
-      if (coordinates.selectAll("*").size()) turnButtonOn("toggleCoordinates"); else turnButtonOff("toggleCoordinates");
-      if (compass.style("display") !== "none" && compass.select("use").size()) turnButtonOn("toggleCompass"); else turnButtonOff("toggleCompass");
-      if (rivers.style("display") !== "none") turnButtonOn("toggleRivers"); else turnButtonOff("toggleRivers");
-      if (terrain.style("display") !== "none" && terrain.selectAll("*").size()) turnButtonOn("toggleRelief"); else turnButtonOff("toggleRelief");
-      if (relig.selectAll("*").size()) turnButtonOn("toggleReligions"); else turnButtonOff("toggleReligions");
-      if (cults.selectAll("*").size()) turnButtonOn("toggleCultures"); else turnButtonOff("toggleCultures");
-      if (statesBody.selectAll("*").size()) turnButtonOn("toggleStates"); else turnButtonOff("toggleStates");
-      if (provs.selectAll("*").size()) turnButtonOn("toggleProvinces"); else turnButtonOff("toggleProvinces");
-      if (zones.selectAll("*").size() && zones.style("display") !== "none") turnButtonOn("toggleZones"); else turnButtonOff("toggleZones");
-      if (borders.style("display") !== "none") turnButtonOn("toggleBorders"); else turnButtonOff("toggleBorders");
-      if (routes.style("display") !== "none" && routes.selectAll("path").size()) turnButtonOn("toggleRoutes"); else turnButtonOff("toggleRoutes");
-      if (temperature.selectAll("*").size()) turnButtonOn("toggleTemp"); else turnButtonOff("toggleTemp");
-      if (prec.selectAll("circle").size()) turnButtonOn("togglePrec"); else turnButtonOff("togglePrec");
-      if (labels.style("display") !== "none") turnButtonOn("toggleLabels"); else turnButtonOff("toggleLabels");
-      if (icons.style("display") !== "none") turnButtonOn("toggleIcons"); else turnButtonOff("toggleIcons");
-      if (armies.selectAll("*").size() && armies.style("display") !== "none") turnButtonOn("toggleMilitary"); else turnButtonOff("toggleMilitary");
-      if (markers.selectAll("*").size() && markers.style("display") !== "none") turnButtonOn("toggleMarkers"); else turnButtonOff("toggleMarkers");
-      if (ruler.style("display") !== "none") turnButtonOn("toggleRulers"); else turnButtonOff("toggleRulers");
-      if (scaleBar.style("display") !== "none") turnButtonOn("toggleScaleBar"); else turnButtonOff("toggleScaleBar");
+    const notHidden = selection => selection.node() && selection.style("display") !== "none";
+    const hasChildren = selection => selection.node()?.hasChildNodes();
+    const hasChild = (selection, selector) => selection.node()?.querySelector(selector);
+    const turnOn = el => document.getElementById(el).classList.remove("buttonoff");
 
-      // special case for population bars
-      const populationIsOn = population.selectAll("line").size();
-      if (populationIsOn) drawPopulation();
-      if (populationIsOn) turnButtonOn("togglePopulation"); else turnButtonOff("togglePopulation");
+    void function restoreLayersState() {
+      // turn all layers off
+      document.getElementById("mapLayers").querySelectorAll("li").forEach(el => el.classList.add("buttonoff"));
+
+      // turn on active layers
+      if (notHidden(texture) && hasChild(texture, "image")) turnOn("toggleTexture");
+      if (hasChildren(terrs)) turnOn("toggleHeight");
+      if (hasChildren(biomes)) turnOn("toggleBiomes");
+      if (hasChildren(cells)) turnOn("toggleCells");
+      if (hasChildren(gridOverlay)) turnOn("toggleGrid");
+      if (hasChildren(coordinates)) turnOn("toggleCoordinates");
+      if (notHidden(compass) && hasChild(compass, "use")) turnOn("toggleCompass");
+      if (notHidden(rivers)) turnOn("toggleRivers");
+      if (notHidden(terrain) && hasChildren(terrain)) turnOn("toggleRelief");
+      if (hasChildren(relig)) turnOn("toggleReligions");
+      if (hasChildren(cults)) turnOn("toggleCultures");
+      if (hasChildren(statesBody)) turnOn("toggleStates");
+      if (hasChildren(provs)) turnOn("toggleProvinces");
+      if (hasChildren(zones) && notHidden(zones)) turnOn("toggleZones");
+      if (notHidden(borders) && hasChild(compass, "use")) turnOn("toggleBorders");
+      if (notHidden(routes) && hasChild(routes, "path")) turnOn("toggleRoutes");
+      if (hasChildren(temperature)) turnOn("toggleTemp");
+      if (hasChild(population, "line")) turnOn("togglePopulation");
+      if (hasChildren(ice)) turnOn("toggleIce");
+      if (hasChild(prec, "circle")) turnOn("togglePrec");
+      if (notHidden(emblems) && hasChild(emblems, "use")) turnOn("toggleEmblems");
+      if (notHidden(labels)) turnOn("toggleLabels");
+      if (notHidden(icons)) turnOn("toggleIcons");
+      if (hasChildren(armies) && notHidden(armies)) turnOn("toggleMilitary");
+      if (hasChildren(markers) && notHidden(markers)) turnOn("toggleMarkers");
+      if (notHidden(ruler)) turnOn("toggleRulers");
+      if (notHidden(scaleBar)) turnOn("toggleScaleBar");
 
       getCurrentPreset();
     }()
 
     void function restoreEvents() {
-      ruler.selectAll("g").call(d3.drag().on("start", dragRuler));
-      ruler.selectAll("text").on("click", removeParent);
-      ruler.selectAll("g.ruler circle").call(d3.drag().on("drag", dragRulerEdge));
-      ruler.selectAll("g.ruler circle").call(d3.drag().on("drag", dragRulerEdge));
-      ruler.selectAll("g.ruler rect").call(d3.drag().on("start", rulerCenterDrag));
-      ruler.selectAll("g.opisometer circle").call(d3.drag().on("start", dragOpisometerEnd));
-      ruler.selectAll("g.opisometer circle").call(d3.drag().on("start", dragOpisometerEnd));
-
-      scaleBar.on("mousemove", () => tip("Click to open Units Editor"));
+      scaleBar.on("mousemove", () => tip("Click to open Units Editor")).on("click", () => editUnits());
       legend.on("mousemove", () => tip("Drag to change the position. Click to hide the legend")).on("click", () => clearLegend());
     }()
 
@@ -879,7 +973,7 @@ function parseLoadedData(data) {
       if (version < 1.11) {
         // v 1.11 added new attributes
         terrs.attr("scheme", "bright").attr("terracing", 0).attr("skip", 5).attr("relax", 0).attr("curve", 0);
-        svg.select("#oceanic > rect").attr("id", "oceanicPattern");
+        svg.select("#oceanic > *").attr("id", "oceanicPattern");
         oceanLayers.attr("layers", "-6,-3,-1");
         gridOverlay.attr("type", "pointyHex").attr("size", 10);
 
@@ -924,13 +1018,6 @@ function parseLoadedData(data) {
       }
 
       if (version < 1.22) {
-        // v 1.21 had incorrect style formatting
-        localStorage.removeItem("styleClean");
-        localStorage.removeItem("styleGloom");
-        localStorage.removeItem("styleAncient");
-        localStorage.removeItem("styleMonochrome");
-        addDefaulsStyles();
-
         // v 1.22 changed state neighbors from Set object to array
         BurgsAndStates.collectStatistics();
       }
@@ -948,7 +1035,6 @@ function parseLoadedData(data) {
         BurgsAndStates.generateCampaigns();
 
         // v 1.3 added militry layer
-        svg.select("defs").append("style").text(armiesStyle()); // add armies style
         armies = viewbox.insert("g", "#icons").attr("id", "armies");
         armies.attr("opacity", 1).attr("fill-opacity", 1).attr("font-size", 6).attr("box-size", 3).attr("stroke", "#000").attr("stroke-width", .3);
         turnButtonOn("toggleMilitary");
@@ -988,65 +1074,224 @@ function parseLoadedData(data) {
         pack.states.filter(s => s.military).forEach(s => s.military.forEach(r => r.state = s.i));
       }
 
+      if (version < 1.5) {
+        // not need to store default styles from v 1.5
+        localStorage.removeItem("styleClean");
+        localStorage.removeItem("styleGloom");
+        localStorage.removeItem("styleAncient");
+        localStorage.removeItem("styleMonochrome");
+
+        // v 1.5 cultures has shield attribute
+        pack.cultures.forEach(culture => {
+          if (culture.removed) return;
+          culture.shield = Cultures.getRandomShield();
+        });
+
+        // v 1.5 added burg type value
+        pack.burgs.forEach(burg => {
+          if (!burg.i || burg.removed) return;
+          burg.type = BurgsAndStates.getType(burg.cell, burg.port);
+        });
+
+        // v 1.5 added emblems
+        defs.append("g").attr("id", "defs-emblems");
+        emblems = viewbox.insert("g", "#population").attr("id", "emblems").style("display", "none");
+        emblems.append("g").attr("id", "burgEmblems");
+        emblems.append("g").attr("id", "provinceEmblems");
+        emblems.append("g").attr("id", "stateEmblems");
+        regenerateEmblems();
+        toggleEmblems();
+
+        // v 1.5 changed releif icons data
+        terrain.selectAll("use").each(function() {
+          const type = this.getAttribute("data-type") || this.getAttribute("xlink:href");
+          this.removeAttribute("xlink:href");
+          this.removeAttribute("data-type");
+          this.removeAttribute("data-size");
+          this.setAttribute("href", type);
+        });
+      }
+
+      if (version < 1.6) {
+        // v 1.6 changed rivers data
+        for (const river of pack.rivers) {
+          const el = document.getElementById("river"+river.i);
+          if (el) {
+            river.widthFactor = +el.getAttribute("data-width");
+            el.removeAttribute("data-width");
+            el.removeAttribute("data-increment");
+            river.discharge = pack.cells.fl[river.mouth] || 1;
+            river.width = rn(river.length / 100, 2);
+            river.sourceWidth = .1;
+          } else {
+            Rivers.remove(river.i);
+          }
+        }
+
+        // v 1.6 changed lakes data
+        for (const f of pack.features) {
+          if (f.type !== "lake") continue;
+          if (f.evaporation) continue;
+
+          f.flux = f.flux || f.cells * 3;
+          f.temp = grid.cells.temp[pack.cells.g[f.firstCell]];
+          f.height = f.height || d3.min(pack.cells.c[f.firstCell].map(c => pack.cells.h[c]).filter(h => h >= 20));
+          const height = (f.height - 18) ** heightExponentInput.value;
+          const evaporation = (700 * (f.temp + .006 * height) / 50 + 75) / (80 - f.temp);
+          f.evaporation = rn(evaporation * f.cells);
+          f.name = f.name || Lakes.getName(f);
+          delete f.river;
+        }
+      }
+
+      if (version < 1.61) {
+        // v 1.61 changed rulers data
+        ruler.style("display", null);
+        rulers = new Rulers();
+
+        ruler.selectAll(".ruler > .white").each(function() {
+          const x1 = +this.getAttribute("x1");
+          const y1 = +this.getAttribute("y1");
+          const x2 = +this.getAttribute("x2");
+          const y2 = +this.getAttribute("y2");
+          if (isNaN(x1) || isNaN(y1) || isNaN(x2) || isNaN(y2)) return;
+          const points = [[x1, y1], [x2, y2]];
+          rulers.create(Ruler, points);
+        });
+
+        ruler.selectAll("g.opisometer").each(function() {
+          const pointsString = this.dataset.points;
+          if (!pointsString) return;
+          const points = JSON.parse(pointsString);
+          rulers.create(Opisometer, points);
+        });
+
+        ruler.selectAll("path.planimeter").each(function() {
+          const length = this.getTotalLength();
+          if (length < 30) return;
+
+          const step = length > 1000 ? 40 : length > 400 ? 20 : 10;
+          const increment = length / Math.ceil(length / step);
+          const points = [];
+          for (let i=0; i <= length; i += increment) {
+            const point = this.getPointAtLength(i);
+            points.push([point.x | 0, point.y | 0]);
+          }
+
+          rulers.create(Planimeter, points);
+        });
+
+        ruler.selectAll("*").remove();
+
+        if (rulers.data.length) {
+          turnButtonOn("toggleRulers");
+          rulers.draw();
+        } else turnButtonOff("toggleRulers");
+
+        // 1.61 changed oceanicPattern from rect to image
+        const pattern = document.getElementById("oceanic");
+        const filter = pattern.firstElementChild.getAttribute("filter");
+        const href = filter ? "./images/" + filter.replace("url(#", "").replace(")", "") + ".png" : "";
+        pattern.innerHTML = `<image id="oceanicPattern" href=${href} width="100" height="100"></image>`;
+        document.getElementById("oceanPattern").setAttribute("opacity", .2);
+      }
     }()
+
+    if (version < 1.62) {
+      // v 1.62 changed grid data
+      gridOverlay.attr("size", null);
+    }
 
     void function checkDataIntegrity() {
       const cells = pack.cells;
+
+      if (pack.cells.i.length !== pack.cells.state.length) {
+        ERROR && console.error("Striping issue. Map data is corrupted. The only solution is to edit the heightmap in erase mode");
+      }
 
       const invalidStates = [...new Set(cells.state)].filter(s => !pack.states[s] || pack.states[s].removed);
       invalidStates.forEach(s => {
         const invalidCells = cells.i.filter(i => cells.state[i] === s);
         invalidCells.forEach(i => cells.state[i] = 0);
-        console.error("Data Integrity Check. Invalid state", s, "is assigned to cells", invalidCells);
+        ERROR && console.error("Data Integrity Check. Invalid state", s, "is assigned to cells", invalidCells);
       });
 
       const invalidProvinces = [...new Set(cells.province)].filter(p => p && (!pack.provinces[p] || pack.provinces[p].removed));
       invalidProvinces.forEach(p => {
         const invalidCells = cells.i.filter(i => cells.province[i] === p);
         invalidCells.forEach(i => cells.province[i] = 0);
-        console.error("Data Integrity Check. Invalid province", p, "is assigned to cells", invalidCells);
+        ERROR && console.error("Data Integrity Check. Invalid province", p, "is assigned to cells", invalidCells);
       });
 
       const invalidCultures = [...new Set(cells.culture)].filter(c => !pack.cultures[c] || pack.cultures[c].removed);
       invalidCultures.forEach(c => {
         const invalidCells = cells.i.filter(i => cells.culture[i] === c);
         invalidCells.forEach(i => cells.province[i] = 0);
-        console.error("Data Integrity Check. Invalid culture", c, "is assigned to cells", invalidCells);
+        ERROR && console.error("Data Integrity Check. Invalid culture", c, "is assigned to cells", invalidCells);
       });
 
       const invalidReligions = [...new Set(cells.religion)].filter(r => !pack.religions[r] || pack.religions[r].removed);
       invalidReligions.forEach(r => {
         const invalidCells = cells.i.filter(i => cells.religion[i] === r);
         invalidCells.forEach(i => cells.religion[i] = 0);
-        console.error("Data Integrity Check. Invalid religion", c, "is assigned to cells", invalidCells);
+        ERROR && console.error("Data Integrity Check. Invalid religion", c, "is assigned to cells", invalidCells);
       });
 
       const invalidFeatures = [...new Set(cells.f)].filter(f => f && !pack.features[f]);
       invalidFeatures.forEach(f => {
         const invalidCells = cells.i.filter(i => cells.f[i] === f);
         // No fix as for now
-        console.error("Data Integrity Check. Invalid feature", f, "is assigned to cells", invalidCells);
+        ERROR && console.error("Data Integrity Check. Invalid feature", f, "is assigned to cells", invalidCells);
       });
 
       const invalidBurgs = [...new Set(cells.burg)].filter(b => b && (!pack.burgs[b] || pack.burgs[b].removed));
       invalidBurgs.forEach(b => {
         const invalidCells = cells.i.filter(i => cells.burg[i] === b);
         invalidCells.forEach(i => cells.burg[i] = 0);
-        console.error("Data Integrity Check. Invalid burg", b, "is assigned to cells", invalidCells);
+        ERROR && console.error("Data Integrity Check. Invalid burg", b, "is assigned to cells", invalidCells);
+      });
+
+      const invalidRivers = [...new Set(cells.r)].filter(r => r && !pack.rivers.find(river => river.i === r));
+      invalidRivers.forEach(r => {
+        const invalidCells = cells.i.filter(i => cells.r[i] === r);
+        invalidCells.forEach(i => cells.r[i] = 0);
+        rivers.select("river"+r).remove();
+        ERROR && console.error("Data Integrity Check. Invalid river", r, "is assigned to cells", invalidCells);
       });
 
       pack.burgs.forEach(b => {
         if (!b.i || b.removed) return;
-        if (b.port < 0) {console.error("Data Integrity Check. Burg", b.i, "has invalid port value", b.port); b.port = 0;}
-        if (b.cell < cells.i.length) return;
-        console.error("Data Integrity Check. Burg", b.i, "is linked to invalid cell", b.cell);
-        b.cell = findCell(b.x, b.y);
-        cells.i.filter(i => cells.burg[i] === b.i).forEach(i => cells.burg[i] = 0);
-        cells.burg[b.cell] = b.i;
+        if (b.port < 0) {ERROR && console.error("Data Integrity Check. Burg", b.i, "has invalid port value", b.port); b.port = 0;}
+
+        if (b.cell >= cells.i.length) {
+          ERROR && console.error("Data Integrity Check. Burg", b.i, "is linked to invalid cell", b.cell);
+          b.cell = findCell(b.x, b.y);
+          cells.i.filter(i => cells.burg[i] === b.i).forEach(i => cells.burg[i] = 0);
+          cells.burg[b.cell] = b.i;
+        }
+
+        if (b.state && !pack.states[b.state]) {
+          ERROR && console.error("Data Integrity Check. Burg", b.i, "is linked to invalid state", b.state);
+          b.state = 0;
+        }
+      });
+
+      pack.provinces.forEach(p => {
+        if (!p.i || p.removed) return;
+        if (pack.states[p.state] && !pack.states[p.state].removed) return;
+        ERROR && console.error("Data Integrity Check. Province", p.i, "is linked to removed state", p.state);
+        p.removed = true; // remove incorrect province
       });
     }()
 
     changeMapSize();
+
+    // remove href from emblems, to trigger rendering on load
+    emblems.selectAll("use").attr("href", null);
+
+    // draw data layers (no kept in svg)
+    if (rulers && layerIsOn("toggleRulers")) rulers.draw();
+    if (layerIsOn("toggleGrid")) drawGrid();
 
     // set options
     yearInput.value = options.year;
@@ -1056,13 +1301,13 @@ function parseLoadedData(data) {
     focusOn(); // based on searchParams focus on point, cell or burg
     invokeActiveZooming();
 
-    console.warn(`TOTAL: ${rn((performance.now()-uploadMap.timeStart)/1000,2)}s`);
+    WARN && console.warn(`TOTAL: ${rn((performance.now()-uploadMap.timeStart)/1000,2)}s`);
     showStatistics();
-    console.groupEnd("Loaded Map " + seed);
+    INFO && console.groupEnd("Loaded Map " + seed);
     tip("Map is successfully loaded", true, "success", 7000);
   }
   catch(error) {
-    console.error(error);
+    ERROR && console.error(error);
     clearMainTip();
 
     alertMessage.innerHTML = `An error is occured on map loading. Select a different file to load,

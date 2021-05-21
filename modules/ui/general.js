@@ -19,6 +19,12 @@ document.getElementById("dialogs").addEventListener("mousemove", showDataTip);
 document.getElementById("optionsContainer").addEventListener("mousemove", showDataTip);
 document.getElementById("exitCustomization").addEventListener("mousemove", showDataTip);
 
+/**
+ * @param {string} tip Tooltip text
+ * @param {boolean} main Show above other tooltips
+ * @param {string} type Message type (color): error, warn, success
+ * @param {number} time Timeout to auto hide, ms
+ */
 function tip(tip = "Tip is undefined", main, type, time) {
   tooltip.innerHTML = tip;
   tooltip.style.background = "linear-gradient(0.1turn, #ffffff00, #5e5c5c80, #ffffff00)";
@@ -27,7 +33,7 @@ function tip(tip = "Tip is undefined", main, type, time) {
   if (type === "success") tooltip.style.background = "linear-gradient(0.1turn, #ffffff00, #127912cc, #ffffff00)";
 
   if (main) tooltip.dataset.main = tip; // set main tip
-  if (time) setTimeout(tooltip.dataset.main = "", time); // clear main in some time
+  if (time) setTimeout(() => tooltip.dataset.main = "", time); // clear main in some time
 }
 
 function showMainTip() {
@@ -49,7 +55,8 @@ function showDataTip(e) {
   tip(dataTip);
 }
 
-function moved() {
+const moved = debounce(mouseMove, 100);
+function mouseMove() {
   const point = d3.mouse(this);
   const i = findCell(point[0], point[1]); // pack cell id
   if (i === undefined) return;
@@ -81,7 +88,6 @@ function showNotes(e, i) {
 // show viewbox tooltip if main tooltip is blank
 function showMapTooltip(point, e, i, g) {
   tip(""); // clear tip
-  const tag = e.target.tagName;
   const path = e.composedPath ? e.composedPath() : getComposedPath(e.target); // apply polyfill
   if (!path[path.length - 8]) return;
   const group = path[path.length - 7].id;
@@ -89,49 +95,114 @@ function showMapTooltip(point, e, i, g) {
   const land = pack.cells.h[i] >= 20;
 
   // specific elements
-  if (group === "armies") {tip(e.target.parentNode.dataset.name + ". Click to edit"); return;}
-  if (group === "rivers") {tip(getRiverName(e.target.id) + "Click to edit"); return;}
+  if (group === "armies") {
+    tip(e.target.parentNode.dataset.name + ". Click to edit");
+    return;
+  }
+
+  if (group === "emblems" && e.target.tagName === "use") {
+    const parent = e.target.parentNode;
+    const [g, type] = parent.id === "burgEmblems" ? [pack.burgs, "burg"] :
+                      parent.id === "provinceEmblems" ? [pack.provinces, "province"] :
+                      [pack.states, "state"];
+    const i = +e.target.dataset.i;
+    if (event.shiftKey) highlightEmblemElement(type, g[i]);
+
+    d3.select(e.target).raise();
+    d3.select(parent).raise();
+
+    const name = g[i].fullName || g[i].name;
+    tip(`${name} ${type} emblem. Click to edit. Hold Shift to show associated area or place`);
+    return;
+  }
+
+  if (group === "rivers") {
+    const river = +e.target.id.slice(5);
+    const r = pack.rivers.find(r => r.i === river);
+    const name = r ? r.name + " " + r.type : "";
+    tip(name + ". Click to edit");
+    if (riversOverview.offsetParent) highlightEditorLine(riversOverview, river, 5000);
+    return;
+  }
   if (group === "routes") {tip("Click to edit the Route"); return;}
   if (group === "terrain") {tip("Click to edit the Relief Icon"); return;}
-  if (subgroup === "burgLabels" || subgroup === "burgIcons") {tip("Click to open Burg Editor"); return;}
+  if (subgroup === "burgLabels" || subgroup === "burgIcons") {
+    const burg = +path[path.length - 10].dataset.id;
+    const b = pack.burgs[burg];
+    const population = si(b.population * populationRate.value * urbanization.value);
+    tip(`${b.name}. Population: ${population}. Click to edit`);
+    if (burgsOverview.offsetParent) highlightEditorLine(burgsOverview, burg, 5000);
+    return;
+  }
   if (group === "labels") {tip("Click to edit the Label"); return;}
   if (group === "markers") {tip("Click to edit the Marker"); return;}
   if (group === "ruler") {
-    if (tag === "rect") {tip("Drag to split the ruler into 2 parts"); return;}
+    const tag = e.target.tagName;
+    const className = e.target.getAttribute("class");
+    if (tag === "circle" && className === "edge") {tip("Drag to adjust. Hold Ctrl and drag to add a point. Click to remove the point"); return;}
+    if (tag === "circle" && className === "control") {tip("Drag to adjust. Hold Shifta and drag to keep axial direction. Click to remove the point"); return;}
     if (tag === "circle") {tip("Drag to adjust the measurer"); return;}
-    if (tag === "path" || tag === "line") {tip("Drag to move the measurer"); return;}
-    if (tag === "text") {tip("Click to remove the measurer"); return;}
+    if (tag === "polyline") {tip("Click on drag to add a control point"); return;}
+    if (tag === "path") {tip("Drag to move the measurer"); return;}
+    if (tag === "text") {tip("Drag to move, click to remove the measurer"); return;}
   }
   if (subgroup === "burgIcons") {tip("Click to edit the Burg"); return;}
   if (subgroup === "burgLabels") {tip("Click to edit the Burg"); return;}
-  if (group === "lakes" && !land) {tip(`${capitalize(subgroup)} lake. Click to edit`); return;}
+  if (group === "lakes" && !land) {
+    const lakeId = +e.target.dataset.f;
+    const name = pack.features[lakeId]?.name;
+    const fullName = subgroup === "freshwater" ? name : name + " " + subgroup;
+    tip(`${fullName} lake. Click to edit`); return;
+  }
   if (group === "coastline") {tip("Click to edit the coastline"); return;}
-  if (group === "zones") {tip(path[path.length-8].dataset.description); return;}
+  if (group === "zones") {
+    const zone = path[path.length-8];
+    tip(zone.dataset.description);
+    if (zonesEditor.offsetParent) highlightEditorLine(zonesEditor, zone.id, 5000);
+    return;
+  }
   if (group === "ice") {tip("Click to edit the Ice"); return;}
 
   // covering elements
   if (layerIsOn("togglePrec") && land) tip("Annual Precipitation: "+ getFriendlyPrecipitation(i)); else
   if (layerIsOn("togglePopulation")) tip(getPopulationTip(i)); else
   if (layerIsOn("toggleTemp")) tip("Temperature: " + convertTemperature(grid.cells.temp[g])); else
-  if (layerIsOn("toggleBiomes") && pack.cells.biome[i]) tip("Biome: " + biomesData.name[pack.cells.biome[i]]); else
+  if (layerIsOn("toggleBiomes") && pack.cells.biome[i]) {
+    const biome = pack.cells.biome[i]
+    tip("Biome: " + biomesData.name[biome]);
+    if (biomesEditor.offsetParent) highlightEditorLine(biomesEditor, biome);
+  } else
   if (layerIsOn("toggleReligions") && pack.cells.religion[i]) {
-    const religion = pack.religions[pack.cells.religion[i]];
-    const type = religion.type === "Cult" || religion.type == "Heresy" ? religion.type : religion.type + " religion";
-    tip(type + ": " + religion.name);
+    const religion = pack.cells.religion[i];
+    const r = pack.religions[religion];
+    const type = r.type === "Cult" || r.type == "Heresy" ? r.type : r.type + " religion";
+    tip(type + ": " + r.name);
+    if (religionsEditor.offsetParent) highlightEditorLine(religionsEditor, religion);
   } else
   if (pack.cells.state[i] && (layerIsOn("toggleProvinces") || layerIsOn("toggleStates"))) {
-    const state = pack.states[pack.cells.state[i]].fullName;
+    const state = pack.cells.state[i];
+    const stateName = pack.states[state].fullName;
     const province = pack.cells.province[i];
     const prov = province ? pack.provinces[province].fullName + ", " : "";
-    tip(prov + state);
+    tip(prov + stateName);
+    if (statesEditor.offsetParent) highlightEditorLine(statesEditor, state);
+    if (diplomacyEditor.offsetParent) highlightEditorLine(diplomacyEditor, state);
+    if (militaryOverview.offsetParent) highlightEditorLine(militaryOverview, state);
+    if (provincesEditor.offsetParent) highlightEditorLine(provincesEditor, province);
   } else
-  if (layerIsOn("toggleCultures") && pack.cells.culture[i]) tip("Culture: " + pack.cultures[pack.cells.culture[i]].name); else
+  if (layerIsOn("toggleCultures") && pack.cells.culture[i]) {
+    const culture = pack.cells.culture[i];
+    tip("Culture: " + pack.cultures[culture].name);
+    if (culturesEditor.offsetParent) highlightEditorLine(culturesEditor, culture);
+  } else
   if (layerIsOn("toggleHeight")) tip("Height: " + getFriendlyHeight(point));
 }
 
-function getRiverName(id) {
-  const r = pack.rivers.find(r => r.i == id.slice(5));
-  return r ? r.name + " " + r.type + ". " : "";
+function highlightEditorLine(editor, id, timeout = 15000) {
+  Array.from(editor.getElementsByClassName("states hovered")).forEach(el => el.classList.remove("hovered")); // clear all hovered
+  const hovered = Array.from(editor.querySelectorAll("div")).find(el => el.dataset.id == id);
+  if (hovered) hovered.classList.add("hovered"); // add hovered class
+  if (timeout) setTimeout(() => {hovered && hovered.classList.remove("hovered")}, timeout);
 }
 
 // get cell info on mouse move
@@ -175,12 +246,7 @@ function toDMS(coord, c) {
 function getElevation(f, h) {
   if (f.land) return getHeight(h) + " (" + h + ")"; // land: usual height
   if (f.border) return "0 " + heightUnit.value; // ocean: 0
-
-  // lake: lowest coast height - 1
-  const lakeCells = Array.from(pack.cells.i.filter(i => pack.cells.f[i] === f.i));
-  const heights = lakeCells.map(i => pack.cells.c[i].map(c => pack.cells.h[c])).flat().filter(h => h > 19);
-  const elevation = (d3.min(heights)||20) - 1;
-  return getHeight(elevation) + " (" + elevation + ")";
+  if (f.type === "lake") return getHeight(f.height) + " (" + f.height + ")"; // lake: defined on river generation
 }
 
 // get water depth
@@ -241,6 +307,31 @@ function getPopulationTip(i) {
   return `Cell population: ${si(rural+urban)}; Rural: ${si(rural)}; Urban: ${si(urban)}`;
 }
 
+function highlightEmblemElement(type, el) {
+    const i = el.i, cells = pack.cells;
+    const animation = d3.transition().duration(1000).ease(d3.easeSinIn);
+
+    if (type === "burg") {
+      const {x, y} = el;
+      debug.append("circle").attr("cx", x).attr("cy", y).attr("r", 0)
+        .attr("fill", "none").attr("stroke", "#d0240f").attr("stroke-width", 1).attr("opacity", 1)
+        .transition(animation).attr("r", 20).attr("opacity", .1).attr("stroke-width", 0).remove();
+      return;
+    }
+
+    const [x, y] = el.pole || pack.cells.p[el.center];
+    const obj = type === "state" ? cells.state : cells.province;
+    const borderCells = cells.i.filter(id => obj[id] === i && cells.c[id].some(n => obj[n] !== i));
+    const data = Array.from(borderCells).filter((c, i) => !(i%2)).map(i => cells.p[i]).map(i => [i[0], i[1], Math.hypot(i[0]-x, i[1]-y)]);
+
+    debug.selectAll("line").data(data).enter().append("line")
+      .attr("x1", x).attr("y1", y).attr("x2", d => d[0]).attr("y2", d => d[1])
+      .attr("stroke", "#d0240f").attr("stroke-width", .5).attr("opacity", .2)
+      .attr("stroke-dashoffset", d => d[2]).attr("stroke-dasharray", d => d[2])
+      .transition(animation).attr("stroke-dashoffset", 0).attr("opacity", 1)
+      .transition(animation).delay(1000).attr("stroke-dashoffset", d => d[2]).attr("opacity", 0).remove();
+}
+
 // assign lock behavior
 document.querySelectorAll("[data-locked]").forEach(function(e) {
   e.addEventListener("mouseover", function(event) {
@@ -249,7 +340,7 @@ document.querySelectorAll("[data-locked]").forEach(function(e) {
     event.stopPropagation();
   });
 
-  e.addEventListener("click", function(event) {
+  e.addEventListener("click", function() {
     const id = (this.id).slice(5);
     if (this.className === "icon-lock") unlock(id);
     else lock(id);
@@ -286,6 +377,22 @@ function stored(option) {
   return localStorage.getItem(option);
 }
 
+// assign skeaker behaviour
+Array.from(document.getElementsByClassName("speaker")).forEach(el => {
+  const input = el.previousElementSibling;
+  el.addEventListener("click", () => speak(input.value));
+});
+
+function speak(text) {
+  const speaker = new SpeechSynthesisUtterance(text);
+  const voices = speechSynthesis.getVoices();
+  if (voices.length) {
+    const voiceId = +document.getElementById("speakerVoice").value;
+    speaker.voice = voices[voiceId];
+  }
+  speechSynthesis.speak(speaker);
+}
+
 // apply drop-down menu option. If the value is not in options, add it
 function applyOption(select, id, name = id) {
   const custom = !Array.from(select.options).some(o => o.value == id);
@@ -299,6 +406,7 @@ function showInfo() {
   const Reddit = link("https://www.reddit.com/r/FantasyMapGenerator", "Reddit")
   const Patreon = link("https://www.patreon.com/azgaar", "Patreon");
   const Trello = link("https://trello.com/b/7x832DG4/fantasy-map-generator", "Trello");
+  const Armoria = link("https://azgaar.github.io/Armoria", "Armoria");
 
   const QuickStart = link("https://github.com/Azgaar/Fantasy-Map-Generator/wiki/Quick-Start-Tutorial", "Quick start tutorial");
   const QAA = link("https://github.com/Azgaar/Fantasy-Map-Generator/wiki/Q&A", "Q&A page");
@@ -313,9 +421,11 @@ function showInfo() {
     <p>The best way to get help is to contact the community on ${Discord} and ${Reddit}. 
     Before asking questions, please check out the ${QuickStart} and the ${QAA}.</p>
 
-    <p>You can track the development process on ${Trello}.</p>
+    <p>Track the development process on ${Trello}.</p>
 
-    Links:
+    <p>Check out our new project: ${Armoria}, heraldry generator and editor.</p>
+
+    <b>Links:</b>
     <ul style="columns:2">
       <li>${link("https://github.com/Azgaar/Fantasy-Map-Generator", "GitHub repository")}</li>
       <li>${link("https://github.com/Azgaar/Fantasy-Map-Generator/blob/master/LICENSE", "License")}</li>
@@ -332,6 +442,7 @@ function showInfo() {
 // prevent default browser behavior for FMG-used hotkeys
 document.addEventListener("keydown", event => {
   if (event.altKey && event.keyCode !== 18) event.preventDefault(); // disallow alt key combinations
+  if (event.ctrlKey && event.code === "KeyS") event.preventDefault(); // disallow CTRL + C
   if ([112, 113, 117, 120, 9].includes(event.keyCode)) event.preventDefault(); // F1, F2, F6, F9, Tab
 });
 
@@ -360,6 +471,7 @@ document.addEventListener("keyup", event => {
   else if (key === 79 && canvas3d) toggle3dOptions(); // "O" to toggle 3d options
 
   else if (ctrl && key === 81) toggleSaveReminder(); // Ctrl + "Q" to toggle save reminder
+  else if (ctrl && key === 83) saveMap(); // Ctrl + "S" to save .map file
   else if (undo.offsetParent && ctrl && key === 90) undo.click(); // Ctrl + "Z" to undo
   else if (redo.offsetParent && ctrl && key === 89) redo.click(); // Ctrl + "Y" to redo
 
@@ -372,6 +484,7 @@ document.addEventListener("keyup", event => {
   else if (shift && key === 78) editNamesbase(); // Shift + "N" to edit Namesbase
   else if (shift && key === 90) editZones(); // Shift + "Z" to edit Zones
   else if (shift && key === 82) editReligions(); // Shift + "R" to edit Religions
+  else if (shift && key === 89) openEmblemEditor(); // Shift + "Y" to edit Emblems
   else if (shift && key === 81) editUnits(); // Shift + "Q" to edit Units
   else if (shift && key === 79) editNotes(); // Shift + "O" to edit Notes
   else if (shift && key === 84) overviewBurgs(); // Shift + "T" to open Burgs overview
@@ -411,6 +524,7 @@ document.addEventListener("keyup", event => {
   else if (key === 78) togglePopulation(); // "N" to toggle Population layer
   else if (key === 74) toggleIce(); // "J" to toggle Ice layer
   else if (key === 65) togglePrec(); // "A" to toggle Precipitation layer
+  else if (key === 89) toggleEmblems(); // "Y" to toggle Emblems layer
   else if (key === 76) toggleLabels(); // "L" to toggle Labels layer
   else if (key === 73) toggleIcons(); // "I" to toggle Icons layer
   else if (key === 77) toggleMilitary(); // "M" to toggle Military layer

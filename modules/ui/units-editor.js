@@ -33,8 +33,9 @@ function editUnits() {
   document.getElementById("urbanizationOutput").addEventListener("input", changeUrbanizationRate);
   document.getElementById("urbanization").addEventListener("change", changeUrbanizationRate);
 
-  document.getElementById("addLinearRuler").addEventListener("click", addAdditionalRuler);
+  document.getElementById("addLinearRuler").addEventListener("click", addRuler);
   document.getElementById("addOpisometer").addEventListener("click", toggleOpisometerMode);
+  document.getElementById("addRouteOpisometer").addEventListener("click", toggleRouteOpisometerMode);
   document.getElementById("addPlanimeter").addEventListener("click", togglePlanimeterMode);
   document.getElementById("removeRulers").addEventListener("click", removeAllRulers);
   document.getElementById("unitsRestore").addEventListener("click", restoreDefaultUnits);
@@ -177,7 +178,7 @@ function editUnits() {
     heightExponentInput.value = heightExponentOutput.value = 1.8;
     localStorage.removeItem("heightExponent");
     calculateTemperatures();
-    
+
     // scale bar
     barSizeOutput.value = barSize.value = 2;
     barLabel.value = "";
@@ -200,14 +201,16 @@ function editUnits() {
     localStorage.removeItem("urbanization");
   }
 
-  function addAdditionalRuler() {
+  function addRuler() {
     if (!layerIsOn("toggleRulers")) toggleRulers();
-    const x = graphWidth/2, y = graphHeight/2;
     const pt = document.getElementById('map').createSVGPoint();
-    pt.x = x, pt.y = y;
+    pt.x = graphWidth / 2, pt.y = graphHeight / 4;
     const p = pt.matrixTransform(viewbox.node().getScreenCTM().inverse());
-    const dx = rn(graphWidth / 4 / scale), dy = rand(dx / 2, dx * 2) - rand(dx / 2, dx * 2);
-    addRuler(p.x - dx, p.y + dy, p.x + dx, p.y + dy);
+    const dx = graphWidth / 4 / scale;
+    const dy = (rulers.data.length * 40) % (graphHeight / 2);
+    const from = [p.x-dx | 0, p.y+dy | 0];
+    const to = [p.x+dx | 0, p.y+dy | 0];
+    rulers.create(Ruler, [from, to]).draw();
   }
 
   function toggleOpisometerMode() {
@@ -217,10 +220,73 @@ function editUnits() {
       this.classList.remove("pressed");
     } else {
       if (!layerIsOn("toggleRulers")) toggleRulers();
-      tip("Draw a curve to measure its length", true);
+      tip("Draw a curve to measure length. Hold Shift to disallow path optimization", true);
       unitsBottom.querySelectorAll(".pressed").forEach(button => button.classList.remove("pressed"));
       this.classList.add("pressed");
-      viewbox.style("cursor", "crosshair").call(d3.drag().on("start", drawOpisometer));
+      viewbox.style("cursor", "crosshair").call(d3.drag().on("start", function() {
+        const point = d3.mouse(this);
+        const opisometer = rulers.create(Opisometer, [point]).draw();
+
+        d3.event.on("drag", function() {
+          const point = d3.mouse(this);
+          opisometer.addPoint(point);
+        });
+
+        d3.event.on("end", function() {
+          restoreDefaultEvents();
+          clearMainTip();
+          addOpisometer.classList.remove("pressed");
+          if (opisometer.points.length < 2) rulers.remove(opisometer.id);
+          if (!d3.event.sourceEvent.shiftKey) opisometer.optimize();
+        });
+      }));
+    }
+  }
+
+  function toggleRouteOpisometerMode() {
+    if (this.classList.contains("pressed")) {
+      restoreDefaultEvents();
+      clearMainTip();
+      this.classList.remove("pressed");
+    } else {
+      if (!layerIsOn("toggleRulers")) toggleRulers();
+      tip("Draw a curve along routes to measure length. Hold Shift to measure away from roads.", true);
+      unitsBottom.querySelectorAll(".pressed").forEach(button => button.classList.remove("pressed"));
+      this.classList.add("pressed");
+      viewbox.style("cursor", "crosshair").call(d3.drag().on("start", function() {
+        const cells = pack.cells;
+        const burgs = pack.burgs;
+        const point = d3.mouse(this);
+        const c = findCell(point[0], point[1]);
+        if (cells.road[c] || d3.event.sourceEvent.shiftKey) {
+          const b = cells.burg[c];
+          const x = b ? burgs[b].x : cells.p[c][0];
+          const y = b ? burgs[b].y : cells.p[c][1];
+          const routeOpisometer = rulers.create(RouteOpisometer, [[x, y]]).draw();
+
+          d3.event.on("drag", function () {
+            const point = d3.mouse(this);
+            const c = findCell(point[0], point[1]);
+            if (cells.road[c] || d3.event.sourceEvent.shiftKey) {
+              routeOpisometer.trackCell(c, true);
+            }
+          });
+
+          d3.event.on("end", function () {
+            restoreDefaultEvents();
+            clearMainTip();
+            addRouteOpisometer.classList.remove("pressed");
+            if (routeOpisometer.points.length < 2) {
+              rulers.remove(routeOpisometer.id);
+            }
+          });
+        } else {
+          restoreDefaultEvents();
+          clearMainTip();
+          addRouteOpisometer.classList.remove("pressed");
+          tip("Must start in a cell with a route in it", false, "error");
+        }
+      }));
     }
   }
 
@@ -231,21 +297,41 @@ function editUnits() {
       this.classList.remove("pressed");
     } else {
       if (!layerIsOn("toggleRulers")) toggleRulers();
-      tip("Draw a line to measure its inner area", true);
+      tip("Draw a curve to measure its area. Hold Shift to disallow path optimization", true);
       unitsBottom.querySelectorAll(".pressed").forEach(button => button.classList.remove("pressed"));
       this.classList.add("pressed");
-      viewbox.style("cursor", "crosshair").call(d3.drag().on("start", drawPlanimeter));
+      viewbox.style("cursor", "crosshair").call(d3.drag().on("start", function() {
+        const point = d3.mouse(this);
+        const planimeter = rulers.create(Planimeter, [point]).draw();
+
+        d3.event.on("drag", function() {
+          const point = d3.mouse(this);
+          planimeter.addPoint(point);
+        });
+
+        d3.event.on("end", function() {
+          restoreDefaultEvents();
+          clearMainTip();
+          addPlanimeter.classList.remove("pressed");
+          if (planimeter.points.length < 3) rulers.remove(planimeter.id);
+          else if (!d3.event.sourceEvent.shiftKey) planimeter.optimize();
+        });
+      }));
+
     }
   }
 
   function removeAllRulers() {
-    if (!ruler.selectAll("g").size()) return;
-    alertMessage.innerHTML = `Are you sure you want to remove all placed rulers?`;
+    if (!rulers.data.length) return;
+    alertMessage.innerHTML = `
+      Are you sure you want to remove all placed rulers?
+      <br>If you just want to hide rulers, toggle the Rulers layer off in Menu`;
     $("#alert").dialog({resizable: false, title: "Remove all rulers",
       buttons: {
         Remove: function() {
           $(this).dialog("close");
-          ruler.selectAll("g").remove();
+          rulers.undraw();
+          rulers = new Rulers();
         },
         Cancel: function() {$(this).dialog("close");}
       }

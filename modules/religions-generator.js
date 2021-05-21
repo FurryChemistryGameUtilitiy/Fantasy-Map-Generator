@@ -54,7 +54,7 @@
   };
 
   const generate = function() {
-    console.time('generateReligions');
+    TIME && console.time('generateReligions');
     const cells = pack.cells, states = pack.states, cultures = pack.cultures;
     const religions = pack.religions = [];
     cells.religion = new Uint16Array(cells.culture); // cell religion; initially based on culture
@@ -71,7 +71,7 @@
     });
 
     if (religionsInput.value == 0 || pack.cultures.length < 2) {
-      religions.filter(r => r.i).forEach(r => r.code = getCode(r.name));
+      religions.filter(r => r.i).forEach(r => r.code = abbreviate(r.name));
       return;
     }
 
@@ -164,7 +164,7 @@
     expandHeresies();
     checkCenters();
 
-    console.timeEnd('generateReligions');
+    TIME && console.timeEnd('generateReligions');
   }
 
   const add = function(center) {
@@ -182,7 +182,7 @@
     if (type === "Organized") [name, expansion] = getReligionName(form, deity, center)
     else {name = getCultName(form, center); expansion = "global";}
     const formName = type === "Heresy" ? religions[r].form : form;
-    const code = getCode(name);
+    const code = abbreviate(name, religions.map(r => r.code));
     religions.push({i, name, color, culture, type, form:formName, deity, expansion, expansionism:0, center, cells:0, area:0, rural:0, urban:0, origin:r, code});
     cells.religion[center] = i;
   }
@@ -267,9 +267,9 @@
   function checkCenters() {
     const cells = pack.cells, religions = pack.religions;
 
+    const codes = religions.map(r => r.code);
     religions.filter(r => r.i).forEach(r => {
-      // generate religion code (abbreviation)
-      r.code = getCode(r.name);
+      r.code = abbreviate(r.name, codes);
 
       // move religion center if it's not within religion area after expansion
       if (cells.religion[r.center] === r.i) return; // in area
@@ -280,30 +280,19 @@
   }
 
   function updateCultures() {
-    console.time('updateCulturesForReligions');
+    TIME && console.time('updateCulturesForReligions');
     pack.religions = pack.religions.map( (religion, index) => {
       if(index === 0) {
         return religion;
       }
       return {...religion, culture: pack.cells.culture[religion.center]};
     });
-    console.timeEnd('updateCulturesForReligions');
-  }
-
-  // assign a unique two-letters code (abbreviation)
-  function getCode(rawName) {
-    const name = rawName.replace("Old ", ""); // remove Old prefix
-    const words = name.split(" "), letters = words.join("");
-    let code = words.length === 2 ? words[0][0]+words[1][0] : letters.slice(0,2);
-    for (let i=1; i < letters.length-1 && pack.religions.some(r => r.code === code); i++) {
-      code = letters[0] + letters[i].toUpperCase();
-    }
-    return code;
+    TIME && console.timeEnd('updateCulturesForReligions');
   }
 
   // get supreme deity name
   const getDeityName = function(culture) {
-    if (culture === undefined) {console.error("Please define a culture"); return;}
+    if (culture === undefined) {ERROR && console.error("Please define a culture"); return;}
     const meaning = generateMeaning();
     const cultureName = Names.getCulture(culture, null, null, "", .8);
     return cultureName + ", The " + meaning;

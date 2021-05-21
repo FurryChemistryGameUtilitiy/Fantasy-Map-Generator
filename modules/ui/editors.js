@@ -21,7 +21,8 @@ function clicked() {
   const p = d3.mouse(this);
   const i = findCell(p[0], p[1]);
 
-  if (parent.id === "rivers") editRiver();
+  if (grand.id === "emblems") editEmblem();
+  else if (parent.id === "rivers") editRiver();
   else if (grand.id === "routes") editRoute();
   else if (el.tagName === "tspan" && grand.parentNode.parentNode.id === "labels") editLabel();
   else if (grand.id === "burgLabels") editBurg();
@@ -123,8 +124,14 @@ function addBurg(point) {
 
   const temple = pack.states[state].form === "Theocracy";
   const population = Math.max((cells.s[cell] + cells.road[cell]) / 3 + i / 1000 + cell % 100 / 1000, .1);
+  const type = BurgsAndStates.getType(cell, false);
 
-  pack.burgs.push({name, cell, x, y, state, i, culture, feature, capital: 0, port: 0, temple, population});
+  // generate emblem
+  const coa = COA.generate(pack.states[state].coa, .25, null, type);
+  coa.shield = COA.getShield(culture, state);
+  COArenderer.add("burg", i, coa, x, y);
+
+  pack.burgs.push({name, cell, x, y, state, i, culture, feature, capital: 0, port: 0, temple, population, coa, type});
   cells.burg[cell] = i;
 
   const townSize = burgIcons.select("#towns").attr("size") || 0.5;
@@ -141,7 +148,7 @@ function moveBurgToGroup(id, g) {
   const label = document.querySelector("#burgLabels [data-id='" + id + "']");
   const icon = document.querySelector("#burgIcons [data-id='" + id + "']");
   const anchor = document.querySelector("#anchors [data-id='" + id + "']");
-  if (!label || !icon) {console.error("Cannot find label or icon elements"); return;}
+  if (!label || !icon) {ERROR && console.error("Cannot find label or icon elements"); return;}
 
   document.querySelector("#burgLabels > #"+g).appendChild(label);
   document.querySelector("#burgIcons > #"+g).appendChild(icon);
@@ -171,6 +178,13 @@ function removeBurg(id) {
   const cells = pack.cells, burg = pack.burgs[id];
   burg.removed = true;
   cells.burg[burg.cell] = 0;
+
+  if (burg.coa) {
+    const coaId = "burgCOA" + id;
+    if (document.getElementById(coaId)) document.getElementById(coaId).remove();
+    emblems.select(`#burgEmblems > use[data-i='${id}']`).remove();
+    delete burg.coa; // remove to save data
+  }
 }
 
 function toggleCapital(burg) {
@@ -205,6 +219,20 @@ function togglePort(burg) {
   group.append("use").attr("xlink:href", "#icon-anchor").attr("data-id", burg)
     .attr("x", rn(b.x - size * .47, 2)).attr("y", rn(b.y - size * .47, 2))
     .attr("width", size).attr("height", size);
+}
+
+function toggleBurgLock(burg) {
+  const b = pack.burgs[burg];
+  b.lock = b.lock ? 0 : 1;
+}
+
+function showBurgLockTip(burg) {
+  const b = pack.burgs[burg];
+  if (b.lock) {
+    tip("Click to Unlock burg and allow it to be change by regeneration tools");
+  } else {
+    tip("Click to Lock burg and prevent changes by regeneration tools");
+  }
 }
 
 // draw legend box
@@ -544,15 +572,13 @@ function unfog(id) {
 }
 
 function getFileName(dataType) {
-  const formatTime = (time) => {
-    return (time < 10) ? "0" + time : time;
-  };
+  const formatTime = time => time < 10 ? "0" + time : time;
   const name = mapName.value;
   const type = dataType ? dataType + " " : "";
   const date = new Date();
   const year = date.getFullYear();
-  const month = formatTime(date.getMonth());
-  const day = formatTime(date.getDay());
+  const month = formatTime(date.getMonth() + 1);
+  const day = formatTime(date.getDate());
   const hour = formatTime(date.getHours());
   const minutes = formatTime(date.getMinutes());
   const dateString = [year, month, day, hour, minutes].join('-');
@@ -595,7 +621,7 @@ function highlightElement(element) {
   if (tr[0]) x += tr[0];
   let y = box.y + box.height / 2;
   if (tr[1]) y += tr[1];
-  if (scale >= 2) zoomTo(x, y, scale, 1600);
+  zoomTo(x, y, scale > 2 ? scale : 3, 1600);
 }
 
 function selectIcon(initial, callback) {
@@ -639,7 +665,7 @@ function selectIcon(initial, callback) {
 
 // Calls the refresh functionality on all editors currently open.
 function refreshAllEditors() {
-  console.time('refreshAllEditors');
+  TIME && console.time('refreshAllEditors');
   if (document.getElementById('culturesEditorRefresh').offsetParent) culturesEditorRefresh.click();
   if (document.getElementById('biomesEditorRefresh').offsetParent) biomesEditorRefresh.click();
   if (document.getElementById('diplomacyEditorRefresh').offsetParent) diplomacyEditorRefresh.click();
@@ -647,5 +673,5 @@ function refreshAllEditors() {
   if (document.getElementById('religionsEditorRefresh').offsetParent) religionsEditorRefresh.click();
   if (document.getElementById('statesEditorRefresh').offsetParent) statesEditorRefresh.click();
   if (document.getElementById('zonesEditorRefresh').offsetParent) zonesEditorRefresh.click();
-  console.timeEnd('refreshAllEditors');
+  TIME && console.timeEnd('refreshAllEditors');
 }

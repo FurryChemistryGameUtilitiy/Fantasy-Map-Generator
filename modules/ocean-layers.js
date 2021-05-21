@@ -9,15 +9,14 @@
   const OceanLayers = function OceanLayers() {
     const outline = oceanLayers.attr("layers");
     if (outline === "none") return;
-    console.time("drawOceanLayers");
+    TIME && console.time("drawOceanLayers");
 
     lineGen.curve(d3.curveBasisClosed);
     cells = grid.cells, pointsN = grid.cells.i.length, vertices = grid.vertices;
     const limits = outline === "random" ? randomizeOutline() : outline.split(",").map(s => +s);
-    markupOcean(limits);
 
     const chains = [];
-    const opacity = rn(0.4 / limits.length, 2);
+    const opacity = rn(.4 / limits.length, 2);
     used = new Uint8Array(pointsN); // to detect already passed cells
 
     for (const i of cells.i) {
@@ -33,15 +32,12 @@
       const relaxed = chain.filter((v, i) => !(i%relax) || vertices.c[v].some(c => c >= pointsN));
       if (relaxed.length < 4) continue;
       const points = clipPoly(relaxed.map(v => vertices.p[v]), 1);
-      //const inside = d3.polygonContains(points, grid.points[i]);
-      chains.push([t, points]); //chains.push([t, points, inside]);
+      chains.push([t, points]); 
     }
 
-    //const bbox = `M0,0h${graphWidth}v${graphHeight}h${-graphWidth}Z`;
     for (const t of limits) {
       const layer = chains.filter(c => c[0] === t);
       let path = layer.map(c => round(lineGen(c[1]))).join("");
-      //if (layer.every(c => !c[2])) path = bbox + path; // add outer ring if all segments are outside (works not for all cases)
       if (path) oceanLayers.append("path").attr("d", path).attr("fill", "#ecf2f9").style("opacity", opacity);
     }
 
@@ -51,7 +47,7 @@
       return cells.v[i][cells.c[i].findIndex(c => cells.t[c] < t || !cells.t[c])];
     }
 
-    console.timeEnd("drawOceanLayers");
+    TIME && console.timeEnd("drawOceanLayers");
   }
 
   function randomizeOutline() {
@@ -62,16 +58,6 @@
       else {odd *= 2;}
     }
     return limits;
-  }
-
-  // Define grid ocean cells type based on distance form land
-  function markupOcean(limits) {
-    for (let t = -2; t >= limits[0]-1; t--) {
-      for (let i = 0; i < pointsN; i++) {
-        if (cells.t[i] !== t+1) continue;
-        cells.c[i].forEach(function(e) {if (!cells.t[e]) cells.t[e] = t;});
-      }
-    }
   }
 
   // connect vertices to chain
@@ -89,7 +75,7 @@
       if (v[0] !== undefined && v[0] !== prev && c0 !== c1) current = v[0];
       else if (v[1] !== undefined && v[1] !== prev && c1 !== c2) current = v[1];
       else if (v[2] !== undefined && v[2] !== prev && c0 !== c2) current = v[2];
-      if (current === chain[chain.length - 1]) {console.error("Next vertex is not found"); break;}
+      if (current === chain[chain.length - 1]) {ERROR && console.error("Next vertex is not found"); break;}
     }
     chain.push(chain[0]); // push first vertex as the last one
     return chain;

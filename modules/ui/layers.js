@@ -1,29 +1,6 @@
 // UI module stub to control map layers
 "use strict";
 
-// on map regeneration restore layers if they was turned on 
-function restoreLayers() {
-  if (layerIsOn("toggleHeight")) drawHeightmap();
-  if (layerIsOn("toggleCells")) drawCells();
-  if (layerIsOn("toggleGrid")) drawGrid();
-  if (layerIsOn("toggleCoordinates")) drawCoordinates();
-  if (layerIsOn("toggleCompass")) compass.style("display", "block");
-  if (layerIsOn("toggleTemp")) drawTemp();
-  if (layerIsOn("togglePrec")) drawPrec();
-  if (layerIsOn("togglePopulation")) drawPopulation();
-  if (layerIsOn("toggleBiomes")) drawBiomes();
-  if (layerIsOn("toggleRelief")) ReliefIcons();
-  if (layerIsOn("toggleCultures")) drawCultures();
-  if (layerIsOn("toggleProvinces")) drawProvinces();
-  if (layerIsOn("toggleReligions")) drawReligions();
-  if (layerIsOn("toggleIce")) drawIce();
-
-  // states are getting rendered each time, if it's not required than layers should be hidden
-  if (!layerIsOn("toggleBorders")) $('#borders').fadeOut();
-  if (!layerIsOn("toggleStates")) regions.style("display", "none").selectAll("path").remove();
-}
-
-restoreLayers(); // run on-load
 let presets = {}; // global object
 restoreCustomPresets(); // run on-load
 
@@ -38,6 +15,7 @@ function getDefaultPresets() {
     "physical": ["toggleCoordinates", "toggleHeight", "toggleIce", "toggleRivers", "toggleScaleBar"],
     "poi": ["toggleBorders", "toggleHeight", "toggleIce", "toggleIcons", "toggleMarkers", "toggleRivers", "toggleRoutes", "toggleScaleBar"],
     "military": ["toggleBorders", "toggleIcons", "toggleLabels", "toggleMilitary", "toggleRivers", "toggleRoutes", "toggleScaleBar", "toggleStates"],
+    "emblems": ["toggleBorders", "toggleIcons", "toggleIce", "toggleEmblems", "toggleRivers", "toggleRoutes", "toggleScaleBar", "toggleStates"],
     "landmass": ["toggleScaleBar"]
   }
 }
@@ -55,9 +33,10 @@ function restoreCustomPresets() {
   presets = storedPresets;
 }
 
+// run on map generation
 function applyPreset() {
-  const selected = localStorage.getItem("preset");
-  if (selected) changePreset(selected);
+  const preset = localStorage.getItem("preset") || document.getElementById("layersPreset").value;
+  changePreset(preset);
 }
 
 // toggle layers on preset change
@@ -117,21 +96,48 @@ function getCurrentPreset() {
   savePresetButton.style.display = "inline-block";
 }
 
+// run on map regeneration
+function restoreLayers() {
+  if (layerIsOn("toggleHeight")) drawHeightmap();
+  if (layerIsOn("toggleCells")) drawCells();
+  if (layerIsOn("toggleGrid")) drawGrid();
+  if (layerIsOn("toggleCoordinates")) drawCoordinates();
+  if (layerIsOn("toggleCompass")) compass.style("display", "block");
+  if (layerIsOn("toggleTemp")) drawTemp();
+  if (layerIsOn("togglePrec")) drawPrec();
+  if (layerIsOn("togglePopulation")) drawPopulation();
+  if (layerIsOn("toggleBiomes")) drawBiomes();
+  if (layerIsOn("toggleRelief")) ReliefIcons();
+  if (layerIsOn("toggleCultures")) drawCultures();
+  if (layerIsOn("toggleProvinces")) drawProvinces();
+  if (layerIsOn("toggleReligions")) drawReligions();
+  if (layerIsOn("toggleIce")) drawIce();
+  if (layerIsOn("toggleEmblems")) drawEmblems();
+
+  // states are getting rendered each time, if it's not required than layers should be hidden
+  if (!layerIsOn("toggleBorders")) $('#borders').fadeOut();
+  if (!layerIsOn("toggleStates")) regions.style("display", "none").selectAll("path").remove();
+}
+
 function toggleHeight(event) {
+  if (customization === 1) {
+    tip("You cannot turn off the layer when heightmap is in edit mode", false, "error");
+    return;
+  }
+
   if (!terrs.selectAll("*").size()) {
     turnButtonOn("toggleHeight");
     drawHeightmap();
     if (event && isCtrlClick(event)) editStyle("terrs");
   } else {
     if (event && isCtrlClick(event)) {editStyle("terrs"); return;}
-    if (customization === 1) {tip("You cannot turn off the layer when heightmap is in edit mode", false, "error"); return;}
     turnButtonOff("toggleHeight");
     terrs.selectAll("*").remove();
   }
 }
 
 function drawHeightmap() {
-  console.time("drawHeightmap");
+  TIME && console.time("drawHeightmap");
   terrs.selectAll("*").remove();
   const cells = pack.cells, vertices = pack.vertices, n = cells.i.length;
   const used = new Uint8Array(cells.i.length);
@@ -149,7 +155,7 @@ function drawHeightmap() {
   }
 
   let currentLayer = 20;
-  const heights = cells.i.sort((a, b) => cells.h[a] - cells.h[b]); 
+  const heights = cells.i.sort((a, b) => cells.h[a] - cells.h[b]);
   for (const i of heights) {
     const h = cells.h[i];
     if (h > currentLayer) currentLayer += skip;
@@ -165,7 +171,7 @@ function drawHeightmap() {
     paths[h] += round(lineGen(points));
   }
 
-  terrs.append("rect").attr("x", 0).attr("y", 0).attr("width", "100%").attr("height", "100%").attr("fill", scheme(.8)); // draw base layer
+  terrs.append("rect").attr("x", 0).attr("y", 0).attr("width", graphWidth).attr("height", graphHeight).attr("fill", scheme(.8)); // draw base layer
   for (const i of d3.range(20, 101)) {
     if (paths[i].length < 10) continue;
     const color = getColor(i, scheme);
@@ -188,7 +194,7 @@ function drawHeightmap() {
       if (v[0] !== prev && c0 !== c1) current = v[0];
       else if (v[1] !== prev && c1 !== c2) current = v[1];
       else if (v[2] !== prev && c0 !== c2) current = v[2];
-      if (current === chain[chain.length - 1]) {console.error("Next vertex is not found"); break;}
+      if (current === chain[chain.length - 1]) {ERROR && console.error("Next vertex is not found"); break;}
     }
     return chain;
   }
@@ -198,8 +204,8 @@ function drawHeightmap() {
     const n = simplification + 1; // filter each nth element
     return chain.filter((d, i) => i % n === 0);
   }
-  
-  console.timeEnd("drawHeightmap");
+
+  TIME && console.timeEnd("drawHeightmap");
 }
 
 function getColorScheme() {
@@ -228,7 +234,7 @@ function toggleTemp(event) {
 }
 
 function drawTemp() {
-  console.time("drawTemp");
+  TIME && console.time("drawTemp");
   temperature.selectAll("*").remove();
   lineGen.curve(d3.curveBasisClosed);
   const scheme = d3.scaleSequential(d3.interpolateSpectral);
@@ -238,7 +244,7 @@ function drawTemp() {
   const used = new Uint8Array(n); // to detect already passed cells
   const min = d3.min(cells.temp), max = d3.max(cells.temp);
   const step = Math.max(Math.round(Math.abs(min - max) / 5), 1);
-  const isolines = d3.range(min+step, max, step); 
+  const isolines = d3.range(min+step, max, step);
   const chains = [], labels = []; // store label coordinates
 
   for (const i of cells.i) {
@@ -257,8 +263,8 @@ function drawTemp() {
     addLabel(points, t);
   }
 
-  // min temp isoline covers all map
-  temperature.append("path").attr("d", `M0,0 h${svgWidth} v${svgHeight} h${-svgWidth} Z`).attr("fill", scheme(1 - (min - tMin) / delta)).attr("stroke", "none");
+  // min temp isoline covers all graph
+  temperature.append("path").attr("d", `M0,0 h${graphWidth} v${graphHeight} h${-graphWidth} Z`).attr("fill", scheme(1 - (min - tMin) / delta)).attr("stroke", "none");
 
   for (const t of isolines) {
     const path = chains.filter(c => c[0] === t).map(c => round(lineGen(c[1]))).join("");
@@ -311,12 +317,12 @@ function drawTemp() {
       if (v[0] !== prev && c0 !== c1) current = v[0];
       else if (v[1] !== prev && c1 !== c2) current = v[1];
       else if (v[2] !== prev && c0 !== c2) current = v[2];
-      if (current === chain[chain.length - 1]) {console.error("Next vertex is not found"); break;}
+      if (current === chain[chain.length - 1]) {ERROR && console.error("Next vertex is not found"); break;}
     }
     chain.push(start);
     return chain;
   }
-  console.timeEnd("drawTemp");
+  TIME && console.timeEnd("drawTemp");
 }
 
 function toggleBiomes(event) {
@@ -370,7 +376,7 @@ function drawBiomes() {
       if (v[0] !== prev && c0 !== c1) current = v[0];
       else if (v[1] !== prev && c1 !== c2) current = v[1];
       else if (v[2] !== prev && c0 !== c2) current = v[2];
-      if (current === chain[chain.length - 1]) {console.error("Next vertex is not found"); break;}
+      if (current === chain[chain.length - 1]) {ERROR && console.error("Next vertex is not found"); break;}
     }
     return chain;
   }
@@ -412,9 +418,16 @@ function togglePopulation(event) {
   } else {
     if (event && isCtrlClick(event)) {editStyle("population"); return;}
     turnButtonOff("togglePopulation");
-    const hide = d3.transition().duration(1000).ease(d3.easeSinIn);
-    population.select("#rural").selectAll("line").transition(hide).attr("y2", d => d[1]).remove();
-    population.select("#urban").selectAll("line").transition(hide).delay(1000).attr("y2", d => d[1]).remove();
+    const isD3data = population.select("line").datum();
+    if (!isD3data) {
+      // just remove
+      population.selectAll("line").remove();
+    } else {
+      // remove with animation
+      const hide = d3.transition().duration(1000).ease(d3.easeSinIn);
+      population.select("#rural").selectAll("line").transition(hide).attr("y2", d => d[1]).remove();
+      population.select("#urban").selectAll("line").transition(hide).delay(1000).attr("y2", d => d[1]).remove();
+    }
   }
 }
 
@@ -457,7 +470,7 @@ function drawCells() {
   cells.append("path").attr("d", path);
 }
 
-function toggleIce() {
+function toggleIce(event) {
   if (!layerIsOn("toggleIce")) {
     turnButtonOn("toggleIce");
     $('#ice').fadeIn();
@@ -473,10 +486,10 @@ function toggleIce() {
 function drawIce() {
   const cells = grid.cells, vertices = grid.vertices, n = cells.i.length, temp = cells.temp, h = cells.h;
   const used = new Uint8Array(cells.i.length);
-  Math.seedrandom(seed);
+  Math.random = aleaPRNG(seed);
 
-  const shieldMin = -6; // max temp to form ice shield (glacier)
-  const icebergMax = 2; // max temp to form an iceberg
+  const shieldMin = -8; // max temp to form ice shield (glacier)
+  const icebergMax = 1; // max temp to form an iceberg
 
   for (const i of grid.cells.i) {
     const t = temp[i];
@@ -501,7 +514,7 @@ function drawIce() {
     if (grid.features[cells.f[i]].type === "lake") continue; // lake: no icebers
     let size = (6.5 + t) / 10; // iceberg size: 0 = full size, 1 = zero size
     if (cells.t[i] === -1) size *= 1.3; // coasline: smaller icebers
-    size = Math.min(size * (.4 + rand() * 1.2), .95); // randomize iceberd size
+    size = Math.min(size * (.4 + rand() * 1.2), .95); // randomize iceberg size
     resizePolygon(i, size);
   }
 
@@ -526,7 +539,7 @@ function drawIce() {
       if (v[0] !== prev && c0 !== c1) current = v[0];
       else if (v[1] !== prev && c1 !== c2) current = v[1];
       else if (v[2] !== prev && c0 !== c2) current = v[2];
-      if (current === chain[chain.length - 1]) {console.error("Next vertex is not found"); break;}
+      if (current === chain[chain.length - 1]) {ERROR && console.error("Next vertex is not found"); break;}
     }
     return chain;
   }
@@ -547,8 +560,8 @@ function toggleCultures(event) {
 }
 
 function drawCultures() {
-  console.time("drawCultures");
-  
+  TIME && console.time("drawCultures");
+
   cults.selectAll("path").remove();
   const cells = pack.cells, vertices = pack.vertices, cultures = pack.cultures, n = cells.i.length;
   const used = new Uint8Array(cells.i.length);
@@ -586,11 +599,11 @@ function drawCultures() {
       if (v[0] !== prev && c0 !== c1) current = v[0];
       else if (v[1] !== prev && c1 !== c2) current = v[1];
       else if (v[2] !== prev && c0 !== c2) current = v[2];
-      if (current === chain[chain.length - 1]) {console.error("Next vertex is not found"); break;}
+      if (current === chain[chain.length - 1]) {ERROR && console.error("Next vertex is not found"); break;}
     }
     return chain;
   }
-  console.timeEnd("drawCultures");
+  TIME && console.timeEnd("drawCultures");
 }
 
 function toggleReligions(event) {
@@ -607,7 +620,7 @@ function toggleReligions(event) {
 }
 
 function drawReligions() {
-  console.time("drawReligions");
+  TIME && console.time("drawReligions");
 
   relig.selectAll("path").remove();
   const cells = pack.cells, vertices = pack.vertices, religions = pack.religions, features = pack.features, n = cells.i.length;
@@ -635,7 +648,7 @@ function drawReligions() {
   }
 
   const bodyData = body.map((p, i) => [p.length > 10 ? p : null, i, religions[i].color]).filter(d => d[0]);
-  relig.selectAll("path").data(bodyData).enter().append("path").attr("d", d => d[0]).attr("fill", d => d[2]).attr("stroke", "none").attr("id", d => "religion"+d[1]);
+  relig.selectAll("path").data(bodyData).enter().append("path").attr("d", d => d[0]).attr("fill", d => d[2]).attr("id", d => "religion"+d[1]);
   const gapData = gap.map((p, i) => [p.length > 10 ? p : null, i, religions[i].color]).filter(d => d[0]);
   relig.selectAll(".path").data(gapData).enter().append("path").attr("d", d => d[0]).attr("fill", "none").attr("stroke", d => d[2]).attr("id", d => "religion-gap"+d[1]).attr("stroke-width", "10px");
 
@@ -657,12 +670,12 @@ function drawReligions() {
       if (v[0] !== prev && c0 !== c1) {current = v[0]; check(c0 ? c[0] : c[1]);} else
       if (v[1] !== prev && c1 !== c2) {current = v[1]; check(c1 ? c[1] : c[2]);} else
       if (v[2] !== prev && c0 !== c2) {current = v[2]; check(c2 ? c[2] : c[0]);}
-      if (current === chain[chain.length - 1][0]) {console.error("Next vertex is not found"); break;}
+      if (current === chain[chain.length - 1][0]) {ERROR && console.error("Next vertex is not found"); break;}
 
     }
     return chain;
   }
-  console.timeEnd("drawReligions");
+  TIME && console.timeEnd("drawReligions");
 }
 
 function toggleStates(event) {
@@ -680,7 +693,7 @@ function toggleStates(event) {
 
 // draw states
 function drawStates() {
-  console.time("drawStates");
+  TIME && console.time("drawStates");
   regions.selectAll("path").remove();
 
   const cells = pack.cells, vertices = pack.vertices, states = pack.states, n = cells.i.length;
@@ -713,22 +726,23 @@ function drawStates() {
   });
 
   const bodyData = body.map((p, i) => [p.length > 10 ? p : null, i, states[i].color]).filter(d => d[0]);
-  statesBody.selectAll("path").data(bodyData).enter().append("path").attr("d", d => d[0]).attr("fill", d => d[2]).attr("stroke", "none").attr("id", d => "state"+d[1]);
   const gapData = gap.map((p, i) => [p.length > 10 ? p : null, i, states[i].color]).filter(d => d[0]);
-  statesBody.selectAll(".path").data(gapData).enter().append("path").attr("d", d => d[0]).attr("fill", "none").attr("stroke", d => d[2]).attr("id", d => "state-gap"+d[1]);
 
-  defs.select("#statePaths").selectAll("clipPath").remove();
-  defs.select("#statePaths").selectAll("clipPath").data(bodyData).enter().append("clipPath").attr("id", d => "state-clip"+d[1]).append("use").attr("href", d => "#state"+d[1]);
-  statesHalo.selectAll(".path").data(bodyData).enter().append("path")
-    .attr("d", d => d[0]).attr("stroke", d => d3.color(d[2]) ? d3.color(d[2]).darker().hex() : "#666666")
-    .attr("id", d => "state-border"+d[1]).attr("clip-path", d => "url(#state-clip"+d[1]+")");
+  const bodyString = bodyData.map(d => `<path id="state${d[1]}" d="${d[0]}" fill="${d[2]}" stroke="none"/>`).join("");
+  const gapString = gapData.map(d => `<path id="state-gap${d[1]}" d="${d[0]}" fill="none" stroke="${d[2]}"/>`).join("");
+  const clipString = bodyData.map(d => `<clipPath id="state-clip${d[1]}"><use href="#state${d[1]}"/></clipPath>`).join("");
+  const haloString = bodyData.map(d => `<path id="state-border${d[1]}" d="${d[0]}" clip-path="url(#state-clip${d[1]})" stroke="${d3.color(d[2]) ? d3.color(d[2]).darker().hex() : '#666666'}"/>`).join("");
+
+  statesBody.html(bodyString + gapString);
+  defs.select("#statePaths").html(clipString);
+  statesHalo.html(haloString);
 
   // connect vertices to chain
   function connectVertices(start, t, state) {
     const chain = []; // vertices chain to form a path
     let land = vertices.c[start].some(c => cells.h[c] >= 20 && cells.state[c] !== t);
     function check(i) {state = cells.state[i]; land = cells.h[i] >= 20;}
-    
+
     for (let i=0, current = start; i === 0 || current !== start && i < 20000; i++) {
       const prev = chain[chain.length - 1] ? chain[chain.length - 1][0] : -1; // previous vertex in chain
       chain.push([current, state, land]); // add current vertex to sequence
@@ -741,18 +755,18 @@ function drawStates() {
       if (v[0] !== prev && c0 !== c1) {current = v[0]; check(c0 ? c[0] : c[1]);} else
       if (v[1] !== prev && c1 !== c2) {current = v[1]; check(c1 ? c[1] : c[2]);} else
       if (v[2] !== prev && c0 !== c2) {current = v[2]; check(c2 ? c[2] : c[0]);}
-      if (current === chain[chain.length - 1][0]) {console.error("Next vertex is not found"); break;}
+      if (current === chain[chain.length - 1][0]) {ERROR && console.error("Next vertex is not found"); break;}
     }
     chain.push([start, state, land]); // add starting vertex to sequence to close the path
     return chain;
   }
   invokeActiveZooming();
-  console.timeEnd("drawStates");
+  TIME && console.timeEnd("drawStates");
 }
 
 // draw state and province borders
 function drawBorders() {
-  console.time("drawBorders");
+  TIME && console.time("drawBorders");
   borders.selectAll("path").remove();
 
   const cells = pack.cells, vertices = pack.vertices, n = cells.i.length;
@@ -787,7 +801,7 @@ function drawBorders() {
       sUsed[s][stateToCell] = stateTo;
       const vertex = cells.v[i].find(v => vertices.c[v].some(i => cells.h[i] >= 20 && cells.state[i] === stateTo));
       const chain = connectVertices(vertex, s, cells.state, stateTo, sUsed);
-      
+
       if (chain.length > 1) {
         sPath.push("M" + chain.map(c => vertices.p[c]).join(" "));
         i--;
@@ -807,9 +821,9 @@ function drawBorders() {
 
     // find starting vertex
     for (let i=0; i < 1000; i++) {
-      if (i === 999) console.error("Find starting vertex: limit is reached", current, f, t);
+      if (i === 999) ERROR && console.error("Find starting vertex: limit is reached", current, f, t);
       const p = chain[chain.length-2] || -1; // previous vertex
-      const v = vertices.v[current], c = vertices.c[current]; 
+      const v = vertices.v[current], c = vertices.c[current];
 
       const v0 = checkCell(c[0]) !== checkCell(c[1]) && checkVertex(v[0]);
       const v1 = checkCell(c[1]) !== checkCell(c[2]) && checkVertex(v[1]);
@@ -825,7 +839,7 @@ function drawBorders() {
     chain = [current]; // vertices chain to form a path
     // find path
     for (let i=0; i < 1000; i++) {
-      if (i === 999) console.error("Find path: limit is reached", current, f, t);
+      if (i === 999) ERROR && console.error("Find path: limit is reached", current, f, t);
       const p = chain[chain.length-2] || -1; // previous vertex
       const v = vertices.v[current], c = vertices.c[current];
       c.filter(c => array[c] === t).forEach(c => used[f][c] = t);
@@ -845,7 +859,7 @@ function drawBorders() {
     return chain;
   }
 
-  console.timeEnd("drawBorders");
+  TIME && console.timeEnd("drawBorders");
 }
 
 function toggleBorders(event) {
@@ -857,7 +871,7 @@ function toggleBorders(event) {
     if (event && isCtrlClick(event)) {editStyle("borders"); return;}
     turnButtonOff("toggleBorders");
     $('#borders').fadeOut();
-  }  
+  }
 }
 
 function toggleProvinces(event) {
@@ -873,10 +887,30 @@ function toggleProvinces(event) {
 }
 
 function drawProvinces() {
-  console.time("drawProvinces");
+  TIME && console.time("drawProvinces");
   const labelsOn = provs.attr("data-labels") == 1;
   provs.selectAll("*").remove();
 
+  const provinces = pack.provinces;
+  const {body, gap} = getProvincesVertices();
+
+  const g = provs.append("g").attr("id", "provincesBody");
+  const bodyData = body.map((p, i) => [p.length > 10 ? p : null, i, provinces[i].color]).filter(d => d[0]);
+  g.selectAll("path").data(bodyData).enter().append("path").attr("d", d => d[0]).attr("fill", d => d[2]).attr("stroke", "none").attr("id", d => "province"+d[1]);
+  const gapData = gap.map((p, i) => [p.length > 10 ? p : null, i, provinces[i].color]).filter(d => d[0]);
+  g.selectAll(".path").data(gapData).enter().append("path").attr("d", d => d[0]).attr("fill", "none").attr("stroke", d => d[2]).attr("id", d => "province-gap"+d[1]);
+
+  const labels = provs.append("g").attr("id", "provinceLabels");
+  labels.style("display", `${labelsOn ? "block" : "none"}`);
+  const labelData = provinces.filter(p => p.i && !p.removed && p.pole);
+  labels.selectAll(".path").data(labelData).enter().append("text")
+    .attr("x", d => d.pole[0]).attr("y", d => d.pole[1])
+    .attr("id", d => "provinceLabel"+d.i).text(d => d.name);
+
+  TIME && console.timeEnd("drawProvinces");
+}
+
+function getProvincesVertices() {
   const cells = pack.cells, vertices = pack.vertices, provinces = pack.provinces, n = cells.i.length;
   const used = new Uint8Array(cells.i.length);
   const vArray = new Array(provinces.length); // store vertices array
@@ -900,24 +934,13 @@ function drawProvinces() {
     gap[p] += "M" + vertices.p[chain[0][0]] + chain.reduce((r,v,i,d) => !i ? r : !v[2] ? r + "L" + vertices.p[v[0]] : d[i+1] && !d[i+1][2] ? r + "M" +  vertices.p[v[0]] : r, "");
   }
 
-  // find state visual center
+  // find province visual center
   vArray.forEach((ar, i) => {
     const sorted = ar.sort((a, b) => b.length - a.length); // sort by points number
     provinces[i].pole = polylabel(sorted, 1.0); // pole of inaccessibility
   });
 
-  const g = provs.append("g").attr("id", "provincesBody");
-  const bodyData = body.map((p, i) => [p.length > 10 ? p : null, i, provinces[i].color]).filter(d => d[0]);
-  g.selectAll("path").data(bodyData).enter().append("path").attr("d", d => d[0]).attr("fill", d => d[2]).attr("stroke", "none").attr("id", d => "province"+d[1]);
-  const gapData = gap.map((p, i) => [p.length > 10 ? p : null, i, provinces[i].color]).filter(d => d[0]);
-  g.selectAll(".path").data(gapData).enter().append("path").attr("d", d => d[0]).attr("fill", "none").attr("stroke", d => d[2]).attr("id", d => "province-gap"+d[1]);
-
-  const labels = provs.append("g").attr("id", "provinceLabels");
-  labels.style("display", `${labelsOn ? "block" : "none"}`);
-  const labelData = provinces.filter(p => p.i && !p.removed);
-  labels.selectAll(".path").data(labelData).enter().append("text")
-    .attr("x", d => d.pole[0]).attr("y", d => d.pole[1])
-    .attr("id", d => "provinceLabel"+d.i).text(d => d.name);
+  return {body, gap};
 
   // connect vertices to chain
   function connectVertices(start, t, province) {
@@ -937,12 +960,11 @@ function drawProvinces() {
       if (v[0] !== prev && c0 !== c1) {current = v[0]; check(c0 ? c[0] : c[1]);} else
       if (v[1] !== prev && c1 !== c2) {current = v[1]; check(c1 ? c[1] : c[2]);} else
       if (v[2] !== prev && c0 !== c2) {current = v[2]; check(c2 ? c[2] : c[0]);}
-      if (current === chain[chain.length-1][0]) {console.error("Next vertex is not found"); break;}
+      if (current === chain[chain.length-1][0]) {ERROR && console.error("Next vertex is not found"); break;}
     }
     chain.push([start, province, land]); // add starting vertex to sequence to close the path
     return chain;
   }
-  console.timeEnd("drawProvinces");
 }
 
 function toggleGrid(event) {
@@ -950,6 +972,8 @@ function toggleGrid(event) {
     turnButtonOn("toggleGrid");
     drawGrid();
     calculateFriendlyGridSize();
+
+
     if (event && isCtrlClick(event)) editStyle("gridOverlay");
   } else {
     if (event && isCtrlClick(event)) {editStyle("gridOverlay"); return;}
@@ -959,51 +983,22 @@ function toggleGrid(event) {
 }
 
 function drawGrid() {
-  console.time("drawGrid");
   gridOverlay.selectAll("*").remove();
-  const type = styleGridType.value;
-  const size = Math.max(+styleGridSize.value, 2);
-  if (type === "pointyHex" || type === "flatHex") {
-    const points = getHexGridPoints(size, type);
-    const hex = "m" + getHex(size, type).slice(0, 4).join("l");
-    const d = points.map(p => "M" + p + hex).join("");
-    gridOverlay.append("path").attr("d", d);
-  } else if (type === "square") {
-    const pathX = d3.range(size, svgWidth, size).map(x => "M" + rn(x, 2) + ",0v" + svgHeight).join(" ");
-    const pathY = d3.range(size, svgHeight, size).map(y => "M0," + rn(y, 2) + "h" + svgWidth).join(" ");
-    gridOverlay.append("path").attr("d", pathX + pathY);
-  }
+  const pattern = "#pattern_" + (gridOverlay.attr("type") || "pointyHex");
+  const stroke = gridOverlay.attr("stroke") || "#808080";
+  const width = gridOverlay.attr("stroke-width") || .5;
+  const dasharray = gridOverlay.attr("stroke-dasharray") || null;
+  const linecap = gridOverlay.attr("stroke-linecap") || null;
+  const scale = gridOverlay.attr("scale") || 1;
+  const dx = gridOverlay.attr("dx") || 0;
+  const dy = gridOverlay.attr("dy") || 0;
+  const tr = `scale(${scale}) translate(${dx} ${dy})`;
 
-  // calculate hexes centers
-  function getHexGridPoints(size, type) {
-    const points = [];
-    const rt3 = Math.sqrt(3);
-    const off = type === "pointyHex" ? rn(rt3 * size / 2, 2) : rn(size * 3 / 2, 2);
-    const ySpace = type === "pointyHex" ? rn(size * 3 / 2, 2) : rn(rt3 * size / 2, 2);
-    const xSpace = type === "pointyHex" ? rn(rt3 * size, 2) : rn(size * 3, 2);
-    for (let y = 0, l = 0; y < graphHeight+ySpace; y += ySpace, l++) {
-      for (let x = l % 2 ? 0 : off; x < graphWidth+xSpace; x += xSpace) {points.push([rn(x, 2), rn(y, 2)]);}
-    }
-    return points;
-  }
+  const maxWidth = Math.max(+mapWidthInput.value, graphWidth);
+  const maxHeight = Math.max(+mapHeightInput.value, graphHeight);
 
-  // calculate hex points
-  function getHex(radius, type) {
-    let x0 = 0, y0 = 0;
-    const s = type === "pointyHex" ? 0 : Math.PI / -6;
-    const thirdPi = Math.PI / 3;
-    let angles = [s, s + thirdPi, s + 2 * thirdPi, s + 3 * thirdPi, s + 4 * thirdPi, s + 5 * thirdPi];
-    return angles.map(function(a) {
-      const x1 = Math.sin(a) * radius;
-      const y1 = -Math.cos(a) * radius;
-      const dx = rn(x1 - x0, 2);
-      const dy = rn(y1 - y0, 2);
-      x0 = x1, y0 = y1;
-      return [rn(dx, 2), rn(dy, 2)];
-    });
-  }
-
-  console.timeEnd("drawGrid");
+  d3.select(pattern).attr("stroke", stroke).attr("stroke-width", width).attr("stroke-dasharray", dasharray).attr("stroke-linecap", linecap).attr("patternTransform", tr);
+  gridOverlay.append("rect").attr("width", maxWidth).attr("height", maxHeight).attr("fill", "url(" + pattern + ")").attr("stroke", "none");
 }
 
 function toggleCoordinates(event) {
@@ -1064,9 +1059,6 @@ function toggleCompass(event) {
     $('#compass').fadeIn();
     if (!compass.selectAll("*").size()) {
       compass.append("use").attr("xlink:href","#rose");
-      // prolongate rose lines
-      svg.select("g#rose > g#sL > line#sL1").attr("y1", -19000).attr("y2", 19000);
-      svg.select("g#rose > g#sL > line#sL2").attr("x1", -19000).attr("x2", 19000);
       shiftCompass();
     }
     if (event && isCtrlClick(event)) editStyle("compass");
@@ -1096,10 +1088,10 @@ function toggleTexture(event) {
     // append default texture image selected by default. Don't append on load to not harm performance
     if (!texture.selectAll("*").size()) {
       const x = +styleTextureShiftX.value, y = +styleTextureShiftY.value;
-      const href = styleTextureInput.value === "default" ? getDefaultTexture() : setBase64Texture(styleTextureInput.value);
-      texture.append("image").attr("id", "textureImage")
+      const image = texture.append("image").attr("id", "textureImage")
         .attr("x", x).attr("y", y).attr("width", graphWidth - x).attr("height", graphHeight - y)
-        .attr("xlink:href", href).attr("preserveAspectRatio", "xMidYMid slice");
+        .attr("xlink:href", getDefaultTexture()).attr("preserveAspectRatio", "xMidYMid slice");
+      if (styleTextureInput.value !== "default") getBase64(styleTextureInput.value, base64 => image.attr("xlink:href", base64));
     }
     $('#texture').fadeIn();
     zoom.scaleBy(svg, 1.00001); // enforce browser re-draw
@@ -1181,18 +1173,20 @@ function toggleIcons(event) {
     if (event && isCtrlClick(event)) {editStyle("burgIcons"); return;}
     turnButtonOff("toggleIcons");
     $('#icons').fadeOut();
-  }  
+  }
 }
 
 function toggleRulers(event) {
   if (!layerIsOn("toggleRulers")) {
     turnButtonOn("toggleRulers");
-    $('#ruler').fadeIn();
     if (event && isCtrlClick(event)) editStyle("ruler");
+    rulers.draw();
+    ruler.style("display", null);
   } else {
     if (event && isCtrlClick(event)) {editStyle("ruler"); return;}
-    $('#ruler').fadeOut();
     turnButtonOff("toggleRulers");
+    ruler.selectAll("*").remove();
+    ruler.style("display", "none");
   }
 }
 
@@ -1217,7 +1211,104 @@ function toggleZones(event) {
     if (event && isCtrlClick(event)) {editStyle("zones"); return;}
     turnButtonOff("toggleZones");
     $('#zones').fadeOut();
-  }  
+  }
+}
+
+function toggleEmblems(event) {
+  if (!layerIsOn("toggleEmblems")) {
+    turnButtonOn("toggleEmblems");
+    if (!emblems.selectAll("use").size()) drawEmblems();
+    $('#emblems').fadeIn();
+    if (event && isCtrlClick(event)) editStyle("emblems");
+  } else {
+    if (event && isCtrlClick(event)) {editStyle("emblems"); return;}
+    $('#emblems').fadeOut();
+    turnButtonOff("toggleEmblems");
+  }
+}
+
+function drawEmblems() {
+  TIME && console.time("drawEmblems");
+  const {states, provinces, burgs} = pack;
+
+  const validStates = states.filter(s => s.i && !s.removed && s.coa && s.coaSize != 0);
+  const validProvinces = provinces.filter(p => p.i && !p.removed && p.coa && p.coaSize != 0);
+  const validBurgs = burgs.filter(b => b.i && !b.removed && b.coa && b.coaSize != 0);
+
+  const getStateEmblemsSize = () => {
+    const startSize = Math.min(Math.max((graphHeight + graphWidth) / 40, 10), 100);
+    const statesMod = (1 + validStates.length / 100) - (15 - validStates.length) / 200; // states number modifier
+    const sizeMod = +document.getElementById("styleEmblemsStateSizeInput").value || 1;
+    return rn(startSize / statesMod * sizeMod); // target size ~50px on 1536x754 map with 15 states
+  };
+
+  const getProvinceEmblemsSize = () => {
+    const startSize = Math.min(Math.max((graphHeight + graphWidth) / 100, 5), 70);
+    const provincesMod = (1 + validProvinces.length / 1000) - (115 - validProvinces.length) / 1000; // states number modifier
+    const sizeMod = +document.getElementById("styleEmblemsProvinceSizeInput").value || 1;
+    return rn(startSize / provincesMod * sizeMod); // target size ~20px on 1536x754 map with 115 provinces
+  }
+
+  const getBurgEmblemSize = () => {
+    const startSize = Math.min(Math.max((graphHeight + graphWidth) / 185, 2), 50);
+    const burgsMod = (1 + validBurgs.length / 1000) - (450 - validBurgs.length) / 1000; // states number modifier
+    const sizeMod = +document.getElementById("styleEmblemsBurgSizeInput").value || 1;
+    return rn(startSize / burgsMod * sizeMod); // target size ~8.5px on 1536x754 map with 450 burgs
+  }
+
+  const sizeBurgs = getBurgEmblemSize();
+  const burgCOAs = validBurgs.map(burg => {
+    const {x, y} = burg;
+    const size = burg.coaSize || 1;
+    const shift = sizeBurgs * size / 2;
+    return {type: "burg", i: burg.i, x, y, size, shift};
+  });
+
+  const sizeProvinces = getProvinceEmblemsSize();
+  const provinceCOAs = validProvinces.map(province => {
+    if (!province.pole) getProvincesVertices();
+    const [x, y] = province.pole || pack.cells.p[province.center];
+    const size = province.coaSize || 1;
+    const shift = sizeProvinces * size / 2;
+    return {type: "province", i: province.i, x, y, size, shift};
+  });
+
+  const sizeStates = getStateEmblemsSize();
+  const stateCOAs = validStates.map(state => {
+    const [x, y] = state.pole || pack.cells.p[state.center];
+    const size = state.coaSize || 1;
+    const shift = sizeStates * size / 2;
+    return {type: "state", i: state.i, x, y, size, shift};
+  });
+
+  const nodes = burgCOAs.concat(provinceCOAs).concat(stateCOAs);
+  const simulation = d3.forceSimulation(nodes)
+    .alphaMin(.6).alphaDecay(.2).velocityDecay(.6)
+    .force('collision', d3.forceCollide().radius(d => d.shift))
+    .stop();
+
+  d3.timeout(function() {
+    const n = Math.ceil(Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay()));
+    for (let i = 0; i < n; ++i) {
+      simulation.tick();
+    }
+
+    const burgNodes = nodes.filter(node => node.type === "burg");
+    const burgString = burgNodes.map(d => `<use data-i="${d.i}" x="${rn(d.x - d.shift)}" y="${rn(d.y - d.shift)}" width="${d.size}em" height="${d.size}em"/>`).join("");
+    emblems.select("#burgEmblems").attr("font-size", sizeBurgs).html(burgString);
+
+    const provinceNodes = nodes.filter(node => node.type === "province");
+    const provinceString = provinceNodes.map(d => `<use data-i="${d.i}" x="${rn(d.x - d.shift)}" y="${rn(d.y - d.shift)}" width="${d.size}em" height="${d.size}em"/>`).join("");
+    emblems.select("#provinceEmblems").attr("font-size", sizeProvinces).html(provinceString);
+
+    const stateNodes = nodes.filter(node => node.type === "state");
+    const stateString = stateNodes.map(d => `<use data-i="${d.i}" x="${rn(d.x - d.shift)}" y="${rn(d.y - d.shift)}" width="${d.size}em" height="${d.size}em"/>`).join("");
+    emblems.select("#stateEmblems").attr("font-size", sizeStates).html(stateString);
+
+    invokeActiveZooming();
+  });
+
+  TIME && console.timeEnd("drawEmblems");
 }
 
 function layerIsOn(el) {
@@ -1265,6 +1356,7 @@ function getLayer(id) {
   if (id === "togglePopulation") return $("#population");
   if (id === "toggleIce") return $("#ice");
   if (id === "toggleTexture") return $("#texture");
+  if (id === "toggleEmblems") return $("#emblems");
   if (id === "toggleLabels") return $("#labels");
   if (id === "toggleIcons") return $("#icons");
   if (id === "toggleMarkers") return $("#markers");

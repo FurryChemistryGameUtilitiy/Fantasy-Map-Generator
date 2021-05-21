@@ -182,11 +182,9 @@ function toHEX(rgb){
 
 // return array of standard shuffled colors
 function getColors(number) {
-  // const c12 = d3.scaleOrdinal(d3.schemeSet3);
   const c12 = ["#dababf","#fb8072","#80b1d3","#fdb462","#b3de69","#fccde5","#c6b9c1","#bc80bd","#ccebc5","#ffed6f","#8dd3c7","#eb8de7"];
   const cRB = d3.scaleSequential(d3.interpolateRainbow);
   const colors = d3.shuffle(d3.range(number).map(i => i < 12 ? c12[i] : d3.color(cRB((i-12)/(number-12))).hex()));
-  //debug.selectAll("circle").data(colors).enter().append("circle").attr("r", 15).attr("cx", (d,i) => 60 + i * 40).attr("cy", 20).attr("fill", d => d);
   return colors;
 }
 
@@ -224,6 +222,8 @@ function rand(min, max) {
 
 // probability shorthand
 function P(probability) {
+  if (probability >= 1) return true;
+  if (probability <= 0) return false;
   return Math.random() < probability;
 }
 
@@ -232,7 +232,7 @@ function gauss(expected = 100, deviation = 30, min = 0, max = 300, round = 0) {
   return rn(Math.max(Math.min(d3.randomNormal(expected, deviation)(), max), min), round);
 }
 
-/** This is a description of the foo function. */
+// probability shorthand for floats
 function Pint(float) {
   return ~~float + +P(float % 1);
 }
@@ -358,6 +358,37 @@ void function addFindAll() {
   }
 }()
 
+// get segment of any point on polyline
+function getSegmentId(points, point, step = 10) {
+  if (points.length === 2) return 1;
+  const d2 = (p1, p2) => (p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2;
+
+  let minSegment = 1;
+  let minDist = Infinity;
+
+  for (let i=0; i < points.length-1; i++) {
+    const p1 = points[i];
+    const p2 = points[i+1];
+
+    const length = Math.sqrt(d2(p1, p2));
+    const segments = Math.ceil(length / step);
+    const dx = (p2[0] - p1[0]) / segments;
+    const dy = (p2[1] - p1[1]) / segments;
+
+    for (let s=0; s < segments; s++) {
+      const x = p1[0] + s * dx;
+      const y = p1[1] + s * dy;
+      const dist2 = d2(point, [x, y]);
+
+      if (dist2 >= minDist) continue;
+      minDist = dist2;
+      minSegment = i+1;
+    }
+  }
+
+  return minSegment;
+}
+
 // normalization function
 function normalize(val, min, max) {
   return Math.min(Math.max((val - min) / (max - min), 0), 1);
@@ -416,6 +447,19 @@ function getAdjective(string) {
 // get ordinal out of integer: 1 => 1st
 const nth = n => n+(["st","nd","rd"][((n+90)%100-10)%10-1]||"th");
 
+// get two-letters code (abbreviation) from string
+function abbreviate(name, restricted = []) {
+  const parsed = name.replace("Old ", "O ").replace(/[()]/g, ""); // remove Old prefix and parentheses
+  const words = parsed.split(" ");
+  const letters = words.join("");
+
+  let code = words.length === 2 ? words[0][0]+words[1][0] : letters.slice(0,2);
+  for (let i = 1; i < letters.length-1 && restricted.includes(code); i++) {
+    code = letters[0] + letters[i].toUpperCase();
+  }
+  return code;
+}
+
 // conjunct array: [A,B,C] => "A, B and C"
 function list(array) {
   if (!Intl.ListFormat) return array.join(", ");
@@ -471,14 +515,14 @@ function lim(v) {
 
 // get number from string in format "1-3" or "2" or "0.5"
 function getNumberInRange(r) {
-  if (typeof r !== "string") {console.error("The value should be a string", r); return 0;}
+  if (typeof r !== "string") {ERROR && console.error("The value should be a string", r); return 0;}
   if (!isNaN(+r)) return ~~r + +P(r - ~~r);
   const sign = r[0] === "-" ? -1 : 1;
   if (isNaN(+r[0])) r = r.slice(1);
   const range = r.includes("-") ? r.split("-") : null;
-  if (!range) {console.error("Cannot parse the number. Check the format", r); return 0;}
+  if (!range) {ERROR && console.error("Cannot parse the number. Check the format", r); return 0;}
   const count = rand(range[0] * sign, +range[1]);
-  if (isNaN(count) || count < 0) {console.error("Cannot parse number. Check the format", r); return 0;}
+  if (isNaN(count) || count < 0) {ERROR && console.error("Cannot parse number. Check the format", r); return 0;}
   return count;
 }
 
@@ -510,32 +554,29 @@ function getComposedPath(node) {
   return [node];
 };
 
+// polyfill for replaceAll
+if (!String.prototype.replaceAll) {
+  String.prototype.replaceAll = function(str, newStr){
+    if (Object.prototype.toString.call(str).toLowerCase() === '[object regexp]') return this.replace(str, newStr);
+    return this.replace(new RegExp(str, 'g'), newStr);
+  };
+}
+
 // get next unused id
 function getNextId(core, i = 1) {
   while (document.getElementById(core+i)) i++;
   return core + i;
 }
 
-// from https://davidwalsh.name/javascript-debounce-function
-function debounce(func, wait, immediate) {
-  var timeout;
-  return function() {
-    var context = this, args = arguments;
-    var later = function() {
-      timeout = null;
-      if (!immediate) func.apply(context, args);
-    }
-    var callNow = immediate && !timeout;
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-    if (callNow) func.apply(context, args);
-  }
-}
+function debounce(f, ms) {
+  let isCooldown = false;
 
-// pause/block JS execution for a while
-function sleep(delay) {
-  const start = new Date().getTime();
-  while (new Date().getTime() < start + delay);
+  return function() {
+    if (isCooldown) return;
+    f.apply(this, arguments);
+    isCooldown = true;
+    setTimeout(() => isCooldown = false, ms);
+  };
 }
 
 // parse error to get the readable string in Chrome and Firefox
@@ -560,6 +601,20 @@ JSON.isValid = str => {
   try {JSON.parse(str);}
   catch(e) {return false;}
   return true;
+}
+
+function getBase64(url, callback) {
+  const xhr = new XMLHttpRequest();
+  xhr.onload = function () {
+    const reader = new FileReader();
+    reader.onloadend = function () {
+      callback(reader.result);
+    };
+    reader.readAsDataURL(xhr.response);
+  };
+  xhr.open("GET", url);
+  xhr.responseType = "blob";
+  xhr.send();
 }
 
 function getDefaultTexture() {
@@ -597,13 +652,19 @@ function generateDate(from = 100, to = 1000) {
   return new Date(rand(from, to),rand(12),rand(31)).toLocaleDateString("en", {year:'numeric', month:'long', day:'numeric'});
 }
 
+function getQGIScoordinates(x, y) {
+  const cx = mapCoordinates.lonW + (x / graphWidth) * mapCoordinates.lonT;
+  const cy = mapCoordinates.latN - (y / graphHeight) * mapCoordinates.latT; // this is inverted in QGIS otherwise
+  return [cx, cy];
+}
+
 // prompt replacer (prompt does not work in Electron)
 void function() {
   const prompt = document.getElementById("prompt");
   const form = prompt.querySelector("#promptForm");
 
   window.prompt = function(promptText = "Please provide an input", options = {default:1, step:.01, min:0, max:100}, callback) {
-    if (options.default === undefined) {console.error("Prompt: options object does not have default value defined"); return;}
+    if (options.default === undefined) {ERROR && console.error("Prompt: options object does not have default value defined"); return;}
     const input = prompt.querySelector("#promptInput");
     prompt.querySelector("#promptText").innerHTML = promptText;
     const type = typeof(options.default) === "number" ? "number" : "text";
@@ -628,4 +689,4 @@ void function() {
 }()
 
 // indexedDB; ldb object
-!function(){function e(t,o){return n?void(n.transaction("s").objectStore("s").get(t).onsuccess=function(e){var t=e.target.result&&e.target.result.v||null;o(t)}):void setTimeout(function(){e(t,o)},100)}var t=window.indexedDB||window.mozIndexedDB||window.webkitIndexedDB||window.msIndexedDB;if(!t)return void console.error("indexedDB not supported");var n,o={k:"",v:""},r=t.open("d2",1);r.onsuccess=function(e){n=this.result},r.onerror=function(e){console.error("indexedDB request error"),console.log(e)},r.onupgradeneeded=function(e){n=null;var t=e.target.result.createObjectStore("s",{keyPath:"k"});t.transaction.oncomplete=function(e){n=e.target.db}},window.ldb={get:e,set:function(e,t){o.k=e,o.v=t,n.transaction("s","readwrite").objectStore("s").put(o)}}}();
+!function(){function e(t,o){return n?void(n.transaction("s").objectStore("s").get(t).onsuccess=function(e){var t=e.target.result&&e.target.result.v||null;o(t)}):void setTimeout(function(){e(t,o)},100)}var t=window.indexedDB||window.mozIndexedDB||window.webkitIndexedDB||window.msIndexedDB;if(!t)return void ERROR && console.error("indexedDB not supported");var n,o={k:"",v:""},r=t.open("d2",1);r.onsuccess=function(e){n=this.result},r.onerror=function(e){ERROR && console.error("indexedDB request error"),INFO && console.log(e)},r.onupgradeneeded=function(e){n=null;var t=e.target.result.createObjectStore("s",{keyPath:"k"});t.transaction.oncomplete=function(e){n=e.target.db}},window.ldb={get:e,set:function(e,t){o.k=e,o.v=t,n.transaction("s","readwrite").objectStore("s").put(o)}}}();
