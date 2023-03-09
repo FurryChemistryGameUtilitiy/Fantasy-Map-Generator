@@ -1,7 +1,61 @@
 "use strict";
 // FMG utils related to graph
 
-// add boundary points to pseudo-clip voronoi cells
+// check if new grid graph should be generated or we can use the existing one
+function shouldRegenerateGrid(grid, expectedSeed) {
+  if (expectedSeed && expectedSeed !== grid.seed) return true;
+
+  const cellsDesired = +byId("pointsInput").dataset.cells;
+  if (cellsDesired !== grid.cellsDesired) return true;
+
+  const newSpacing = rn(Math.sqrt((graphWidth * graphHeight) / cellsDesired), 2);
+  const newCellsX = Math.floor((graphWidth + 0.5 * newSpacing - 1e-10) / newSpacing);
+  const newCellsY = Math.floor((graphHeight + 0.5 * newSpacing - 1e-10) / newSpacing);
+
+  return grid.spacing !== newSpacing || grid.cellsX !== newCellsX || grid.cellsY !== newCellsY;
+}
+
+function generateGrid() {
+  Math.random = aleaPRNG(seed); // reset PRNG
+  const {spacing, cellsDesired, boundary, points, cellsX, cellsY} = placePoints();
+  const {cells, vertices} = calculateVoronoi(points, boundary);
+  return {spacing, cellsDesired, boundary, points, cellsX, cellsY, cells, vertices, seed};
+}
+
+// place random points to calculate Voronoi diagram
+function placePoints() {
+  TIME && console.time("placePoints");
+  const cellsDesired = +byId("pointsInput").dataset.cells;
+  const spacing = rn(Math.sqrt((graphWidth * graphHeight) / cellsDesired), 2); // spacing between points before jirrering
+
+  const boundary = getBoundaryPoints(graphWidth, graphHeight, spacing);
+  const points = getJitteredGrid(graphWidth, graphHeight, spacing); // points of jittered square grid
+  const cellsX = Math.floor((graphWidth + 0.5 * spacing - 1e-10) / spacing);
+  const cellsY = Math.floor((graphHeight + 0.5 * spacing - 1e-10) / spacing);
+  TIME && console.timeEnd("placePoints");
+
+  return {spacing, cellsDesired, boundary, points, cellsX, cellsY};
+}
+
+// calculate Delaunay and then Voronoi diagram
+function calculateVoronoi(points, boundary) {
+  TIME && console.time("calculateDelaunay");
+  const allPoints = points.concat(boundary);
+  const delaunay = Delaunator.from(allPoints);
+  TIME && console.timeEnd("calculateDelaunay");
+
+  TIME && console.time("calculateVoronoi");
+  const voronoi = new Voronoi(delaunay, allPoints, points.length);
+
+  const cells = voronoi.cells;
+  cells.i = createTypedArray({maxValue: points.length, length: points.length}).map((_, i) => i); // array of indexes
+  const vertices = voronoi.vertices;
+  TIME && console.timeEnd("calculateVoronoi");
+
+  return {cells, vertices};
+}
+
+// add points along map edge to pseudo-clip voronoi cells
 function getBoundaryPoints(width, height, spacing) {
   const offset = rn(-1 * spacing);
   const bSpacing = spacing * 2;
@@ -9,15 +63,18 @@ function getBoundaryPoints(width, height, spacing) {
   const h = height - offset * 2;
   const numberX = Math.ceil(w / bSpacing) - 1;
   const numberY = Math.ceil(h / bSpacing) - 1;
-  let points = [];
+  const points = [];
+
   for (let i = 0.5; i < numberX; i++) {
     let x = Math.ceil((w * i) / numberX + offset);
     points.push([x, offset], [x, h + offset]);
   }
+
   for (let i = 0.5; i < numberY; i++) {
     let y = Math.ceil((h * i) / numberY + offset);
     points.push([offset, y], [w + offset, y]);
   }
+
   return points;
 }
 
@@ -40,15 +97,18 @@ function getJitteredGrid(width, height, spacing) {
 }
 
 // return cell index on a regular square grid
-function findGridCell(x, y) {
-  return Math.floor(Math.min(y / grid.spacing, grid.cellsY - 1)) * grid.cellsX + Math.floor(Math.min(x / grid.spacing, grid.cellsX - 1));
+function findGridCell(x, y, grid) {
+  return (
+    Math.floor(Math.min(y / grid.spacing, grid.cellsY - 1)) * grid.cellsX +
+    Math.floor(Math.min(x / grid.spacing, grid.cellsX - 1))
+  );
 }
 
 // return array of cell indexes in radius on a regular square grid
 function findGridAll(x, y, radius) {
   const c = grid.cells.c;
   let r = Math.floor(radius / grid.spacing);
-  let found = [findGridCell(x, y)];
+  let found = [findGridCell(x, y, grid)];
   if (!r || radius === 1) return found;
   if (r > 0) found = found.concat(c[found[0]]);
   if (r > 1) {
@@ -191,7 +251,14 @@ void (function addFindAll() {
       i++;
 
       // Stop searching if this quadrant can’t contain a closer node.
-      if (!(t.node = t.q.node) || (t.x1 = t.q.x0) > t.x3 || (t.y1 = t.q.y0) > t.y3 || (t.x2 = t.q.x1) < t.x0 || (t.y2 = t.q.y1) < t.y0) continue;
+      if (
+        !(t.node = t.q.node) ||
+        (t.x1 = t.q.x0) > t.x3 ||
+        (t.y1 = t.q.y0) > t.y3 ||
+        (t.x2 = t.q.x1) < t.x0 ||
+        (t.y2 = t.q.y1) < t.y0
+      )
+        continue;
 
       // Bisect the current quadrant.
       if (t.node.length) {
@@ -261,7 +328,7 @@ function drawCellsValue(data) {
 function drawPolygons(data) {
   const max = d3.max(data),
     min = d3.min(data),
-    scheme = getColorScheme();
+    scheme = getColorScheme(terrs.attr("scheme"));
   data = data.map(d => 1 - normalize(d, min, max));
 
   debug.selectAll("polygon").remove();

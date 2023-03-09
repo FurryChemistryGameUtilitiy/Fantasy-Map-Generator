@@ -37,6 +37,7 @@ function editBurg(id) {
   burgBody.querySelectorAll(".burgFeature").forEach(el => el.addEventListener("click", toggleFeature));
   document.getElementById("mfcgBurgSeed").addEventListener("change", changeSeed);
   document.getElementById("regenerateMFCGBurgSeed").addEventListener("click", randomizeSeed);
+  document.getElementById("addCustomMFCGBurgLink").addEventListener("click", addCustomMfcgLink);
 
   document.getElementById("burgStyleShow").addEventListener("click", showStyleSection);
   document.getElementById("burgStyleHide").addEventListener("click", hideStyleSection);
@@ -51,6 +52,7 @@ function editBurg(id) {
   document.getElementById("burglLegend").addEventListener("click", editBurgLegend);
   document.getElementById("burgLock").addEventListener("click", toggleBurgLockButton);
   document.getElementById("burgRemove").addEventListener("click", removeSelectedBurg);
+  document.getElementById("burgTemperatureGraph").addEventListener("click", showTemperatureGraph);
 
   function updateBurgValues() {
     const id = +elSelected.attr("data-id");
@@ -112,7 +114,13 @@ function editBurg(id) {
     if (options.showMFCGMap) {
       document.getElementById("mfcgPreviewSection").style.display = "block";
       updateMFCGFrame(b);
-      document.getElementById("mfcgBurgSeed").value = getBurgSeed(b);
+
+      if (b.link) {
+        document.getElementById("mfcgBurgSeedSection").style.display = "none";
+      } else {
+        document.getElementById("mfcgBurgSeedSection").style.display = "inline-block";
+        document.getElementById("mfcgBurgSeed").value = getBurgSeed(b);
+      }
     } else {
       document.getElementById("mfcgPreviewSection").style.display = "none";
     }
@@ -258,14 +266,7 @@ function editBurg(id) {
     toggleNewGroupInput();
     document.getElementById("burgInputGroup").value = "";
 
-    const newLabelG = document.querySelector("#burgLabels").appendChild(labelG.cloneNode(false));
-    newLabelG.id = group;
-    const newIconG = document.querySelector("#burgIcons").appendChild(iconG.cloneNode(false));
-    newIconG.id = group;
-    if (anchor) {
-      const newAnchorG = document.querySelector("#anchors").appendChild(anchorG.cloneNode(false));
-      newAnchorG.id = group;
-    }
+    addBurgsGroup(group);
     moveBurgToGroup(id, group);
   }
 
@@ -280,13 +281,13 @@ function editBurg(id) {
     const burgsToRemove = burgsInGroup.filter(b => !(pack.burgs[b].capital || pack.burgs[b].lock));
     const capital = burgsToRemove.length < burgsInGroup.length;
 
-    alertMessage.innerHTML = `Are you sure you want to remove
-      ${basic || capital ? "all unlocked elements in the group" : "the entire burg group"}?
-      <br>Please note that capital or locked burgs will not be deleted.
-      <br><br>Burgs to be removed: ${burgsToRemove.length}`;
+    alertMessage.innerHTML = /* html */ `Are you sure you want to remove ${
+      basic || capital ? "all unlocked elements in the burg group" : "the entire burg group"
+    }?
+      <br />Please note that capital or locked burgs will not be deleted. <br /><br />Burgs to be removed: ${burgsToRemove.length}`;
     $("#alert").dialog({
       resizable: false,
-      title: "Remove route group",
+      title: "Remove burg group",
       buttons: {
         Remove: function () {
           $(this).dialog("close");
@@ -347,22 +348,25 @@ function editBurg(id) {
 
   function toggleFeature() {
     const id = +elSelected.attr("data-id");
-    const b = pack.burgs[id];
+    const burg = pack.burgs[id];
     const feature = this.dataset.feature;
     const turnOn = this.classList.contains("inactive");
     if (feature === "port") togglePort(id);
     else if (feature === "capital") toggleCapital(id);
-    else b[feature] = +turnOn;
-    if (b[feature]) this.classList.remove("inactive");
-    else if (!b[feature]) this.classList.add("inactive");
+    else burg[feature] = +turnOn;
+    if (burg[feature]) this.classList.remove("inactive");
+    else if (!burg[feature]) this.classList.add("inactive");
 
-    if (b.port) document.getElementById("burgEditAnchorStyle").style.display = "inline-block";
+    if (burg.port) document.getElementById("burgEditAnchorStyle").style.display = "inline-block";
     else document.getElementById("burgEditAnchorStyle").style.display = "none";
+    updateMFCGFrame(burg);
   }
 
   function toggleBurgLockButton() {
     const id = +elSelected.attr("data-id");
-    toggleBurgLock(id);
+    const burg = pack.burgs[id];
+    burg.lock = !burg.lock;
+
     updateBurgLockIcon();
   }
 
@@ -405,7 +409,7 @@ function editBurg(id) {
 
   function updateMFCGFrame(burg) {
     const mfcgURL = getMFCGlink(burg);
-    document.getElementById("mfcgPreview").setAttribute("src", mfcgURL);
+    document.getElementById("mfcgPreview").setAttribute("src", mfcgURL + "&preview=1");
     document.getElementById("mfcgLink").setAttribute("href", mfcgURL);
   }
 
@@ -424,6 +428,17 @@ function editBurg(id) {
     burg.MFCG = burgSeed;
     updateMFCGFrame(burg);
     document.getElementById("mfcgBurgSeed").value = burgSeed;
+  }
+
+  function addCustomMfcgLink() {
+    const id = +elSelected.attr("data-id");
+    const burg = pack.burgs[id];
+    const message = "Enter custom link to the burg map. It can be a link to Medieval Fantasy City Generator or other tool. Keep empty to use MFCG seed";
+    prompt(message, {default: burg.link || "", required: false}, link => {
+      if (link) burg.link = link;
+      else delete burg.link;
+      updateMFCGFrame(burg);
+    });
   }
 
   function openEmblemEdit() {
@@ -522,10 +537,15 @@ function editBurg(id) {
     editNotes("burg" + id, name);
   }
 
+  function showTemperatureGraph() {
+    const id = elSelected.attr("data-id");
+    showBurgTemperatureGraph(id);
+  }
+
   function removeSelectedBurg() {
     const id = +elSelected.attr("data-id");
     if (pack.burgs[id].capital) {
-      alertMessage.innerHTML = `You cannot remove the burg as it is a state capital.<br><br>
+      alertMessage.innerHTML = /* html */ `You cannot remove the burg as it is a state capital.<br /><br />
         You can change the capital using Burgs Editor (shift + T)`;
       $("#alert").dialog({
         resizable: false,

@@ -8,28 +8,49 @@ window.Markers = (function () {
     const culturesSet = document.getElementById("culturesSet").value;
     const isFantasy = culturesSet.includes("Fantasy");
 
+    /*
+      Default markers config:
+      type - short description (snake-case)
+      icon - unicode character, make sure it's supported by most of the browsers. Source: emojipedia.org
+      dx: icon offset in x direction, in pixels
+      dy: icon offset in y direction, in pixels
+      min: minimum number of candidates to add at least 1 marker
+      each: how many of the candidates should be added as markers
+      multiplier: multiply markers quantity to add
+      list: function to select candidates
+      add: function to add marker legend
+    */
+    // prettier-ignore
     return [
-      {type: "volcanoes", icon: "🌋", multiplier: 1, fn: addVolcanoes},
-      {type: "hot-springs", icon: "♨️", multiplier: 1, fn: addHotSprings},
-      {type: "mines", icon: "⛏️", multiplier: 1, fn: addMines},
-      {type: "bridges", icon: "🌉", multiplier: 1, fn: addBridges},
-      {type: "inns", icon: "🍻", multiplier: 1, fn: addInns},
-      {type: "lighthouses", icon: "🚨", multiplier: 1, fn: addLighthouses},
-      {type: "waterfalls", icon: "⟱", multiplier: 1, fn: addWaterfalls},
-      {type: "battlefields", icon: "⚔️", multiplier: 1, fn: addBattlefields},
-      {type: "dungeons", icon: "🗝️", multiplier: 1, fn: addDungeons},
-      {type: "lake-monsters", icon: "🐉", multiplier: 1, fn: addLakeMonsters},
-      {type: "sea-monsters", icon: "🦑", multiplier: 1, fn: addSeaMonsters},
-      {type: "hill-monsters", icon: "👹", multiplier: 1, fn: addHillMonsters},
-      {type: "sacred-mountains", icon: "🗻", multiplier: 1, fn: addSacredMountains},
-      {type: "sacred-forests", icon: "🌳", multiplier: 1, fn: addSacredForests},
-      {type: "sacred-pineries", icon: "🌲", multiplier: 1, fn: addSacredPineries},
-      {type: "sacred-palm-groves", icon: "🌴", multiplier: 1, fn: addSacredPalmGroves},
-      {type: "brigands", icon: "💰", multiplier: 1, fn: addBrigands},
-      {type: "pirates", icon: "🏴‍☠️", multiplier: 1, fn: addPirates},
-      {type: "statues", icon: "🗿", multiplier: 1, fn: addStatues},
-      {type: "ruines", icon: "🏺", multiplier: 1, fn: addRuines},
-      {type: "portals", icon: "🌀", multiplier: +isFantasy, fn: addPortals}
+      {type: "volcanoes", icon: "🌋", dx: 52, px: 13, min: 10, each: 500, multiplier: 1, list: listVolcanoes, add: addVolcano},
+      {type: "hot-springs", icon: "♨️", dy: 52, min: 30, each: 1200, multiplier: 1, list: listHotSprings, add: addHotSpring},
+      {type: "mines", icon: "⛏️", dx: 48, px: 13, min: 1, each: 15, multiplier: 1, list: listMines, add: addMine},
+      {type: "bridges", icon: "🌉", px: 14, min: 1, each: 5, multiplier: 1, list: listBridges, add: addBridge},
+      {type: "inns", icon: "🍻", px: 14, min: 1, each: 100, multiplier: 1, list: listInns, add: addInn},
+      {type: "lighthouses", icon: "🚨", px: 14, min: 1, each: 2, multiplier: 1, list: listLighthouses, add: addLighthouse},
+      {type: "waterfalls", icon: "⟱", dy: 54, px: 16, min: 1, each: 5, multiplier: 1, list: listWaterfalls, add: addWaterfall},
+      {type: "battlefields", icon: "⚔️", dy: 52, min: 50, each: 700, multiplier: 1, list: listBattlefields, add: addBattlefield},
+      {type: "dungeons", icon: "🗝️", dy: 51, px: 13, min: 30, each: 200, multiplier: 1, list: listDungeons, add: addDungeon},
+      {type: "lake-monsters", icon: "🐉", dy: 48, min: 2, each: 10, multiplier: 1, list: listLakeMonsters, add: addLakeMonster},
+      {type: "sea-monsters", icon: "🦑", min: 50, each: 700, multiplier: 1, list: listSeaMonsters, add: addSeaMonster},
+      {type: "hill-monsters", icon: "👹", dy: 54, px: 13, min: 30, each: 600, multiplier: 1, list: listHillMonsters, add: addHillMonster},
+      {type: "sacred-mountains", icon: "🗻", dy: 48, min: 1, each: 5, multiplier: 1, list: listSacredMountains, add: addSacredMountain},
+      {type: "sacred-forests", icon: "🌳", min: 30, each: 1000, multiplier: 1, list: listSacredForests, add: addSacredForest},
+      {type: "sacred-pineries", icon: "🌲", px: 13, min: 30, each: 800, multiplier: 1, list: listSacredPineries, add: addSacredPinery},
+      {type: "sacred-palm-groves", icon: "🌴", px: 13, min: 1, each: 100, multiplier: 1, list: listSacredPalmGroves, add: addSacredPalmGrove},
+      {type: "brigands", icon: "💰", px: 13, min: 50, each: 100, multiplier: 1, list: listBrigands, add: addBrigands},
+      {type: "pirates", icon: "🏴‍☠️", dx: 51, min: 40, each: 300, multiplier: 1, list: listPirates, add: addPirates},
+      {type: "statues", icon: "🗿", min: 80, each: 1200, multiplier: 1, list: listStatues, add: addStatue},
+      {type: "ruins", icon: "🏺", min: 80, each: 1200, multiplier: 1, list: listRuins, add: addRuins},
+      {type: "circuses", icon: "🎪", min: 80, each: 1000, multiplier: 1, list: listCircuses, add: addCircuses},
+      {type: "jousts", icon: "🤺", dx: 48, min: 5, each: 500, multiplier: 1, list: listJousts, add: addJousts},
+      {type: "canoes", icon: "🛶", min: 1000, each: 2000, multiplier: 1, list: listCanoes, add: addCanoes},
+      {type: "migration", icon: "🐗", min: 20, each: 1000, multiplier: 1, list: listMigrations, add: addMigrations},
+      {type: "dances", icon: "💃🏽", min: 5, each: 60, multiplier: 1, list: listDances, add: addDances},
+      {type: "mirage", icon: "💦", min: 10, each: 400, multiplier: 1, list: listMirage, add: addMirage},
+      {type: "caves", icon:"🦇", min: 60, each: 1000, multiplier: 1, list: listCaves, add: addCaves},
+      {type: "portals", icon: "🌀", px: 14, min: 16, each: 8, multiplier: +isFantasy, list: listPortals, add: addPortal},
+      {type: "rifts", icon: "🎆", min: 1, each: 3000, multiplier: +isFantasy, list: listRifts, add: addRifts}
     ];
   }
 
@@ -61,12 +82,38 @@ window.Markers = (function () {
     generateTypes();
   };
 
+  const add = marker => {
+    const base = config.find(c => c.type === marker.type);
+    if (base) {
+      const {icon, type, dx, dy, px} = base;
+      marker = addMarker({icon, type, dx, dy, px}, marker);
+      base.add("marker" + marker.i, marker.cell);
+      return marker;
+    }
+
+    const i = last(pack.markers)?.i + 1 || 0;
+    pack.markers.push({...marker, i});
+    occupied[marker.cell] = true;
+    return {...marker, i};
+  };
+
   function generateTypes() {
     TIME && console.time("addMarkers");
 
-    config.forEach(({type, icon, multiplier, fn}) => {
+    config.forEach(({type, icon, dx, dy, px, min, each, multiplier, list, add}) => {
       if (multiplier === 0) return;
-      fn(type, icon, multiplier);
+
+      let candidates = Array.from(list(pack));
+      let quantity = getQuantity(candidates, min, each, multiplier);
+      // uncomment for debugging:
+      // console.info(`${icon} ${type}: each ${each} of ${candidates.length}, min ${min} candidates. Got ${quantity}`);
+
+      while (quantity && candidates.length) {
+        const [cell] = extractAnyElement(candidates);
+        const marker = addMarker({icon, type, dx, dy, px}, {cell});
+        add("marker" + marker.i, cell);
+        quantity--;
+      }
     });
 
     occupied = [];
@@ -96,112 +143,115 @@ window.Markers = (function () {
     return cells.p[cell];
   }
 
-  function addMarker({cell, type, icon, dx, dy, px}) {
-    const i = pack.markers.length;
-    const [x, y] = getMarkerCoordinates(cell);
-    const marker = {i, icon, type, x, y, cell};
-    if (dx) marker.dx = dx;
-    if (dy) marker.dy = dy;
-    if (px) marker.px = px;
+  function addMarker(base, marker) {
+    const i = last(pack.markers)?.i + 1 || 0;
+    const [x, y] = getMarkerCoordinates(marker.cell);
+    marker = {...base, x, y, ...marker, i};
     pack.markers.push(marker);
-    occupied[cell] = true;
-    return "marker" + i;
+    occupied[marker.cell] = true;
+    return marker;
   }
 
-  function addVolcanoes(type, icon, multiplier) {
-    const {cells} = pack;
-
-    let mountains = Array.from(cells.i.filter(i => !occupied[i] && cells.h[i] >= 70).sort((a, b) => cells.h[b] - cells.h[a]));
-    let quantity = getQuantity(mountains, 10, 500, multiplier);
-    if (!quantity) return;
-
-    while (quantity) {
-      const [cell] = extractAnyElement(mountains);
-      const id = addMarker({cell, icon, type, dx: 52, px: 13});
-      const proper = Names.getCulture(cells.culture[cell]);
-      const name = P(0.3) ? "Mount " + proper : Math.random() > 0.3 ? proper + " Volcano" : proper;
-      notes.push({id, name, legend: `Active volcano. Height: ${getFriendlyHeight(cells.p[cell])}`});
-      quantity--;
-    }
+  function deleteMarker(markerId) {
+    const noteId = "marker" + markerId;
+    notes = notes.filter(note => note.id !== noteId);
+    pack.markers = pack.markers.filter(m => m.i !== markerId);
   }
 
-  function addHotSprings(type, icon, multiplier) {
-    const {cells} = pack;
-
-    let springs = Array.from(cells.i.filter(i => !occupied[i] && cells.h[i] > 50).sort((a, b) => cells.h[b] - cells.h[a]));
-    let quantity = getQuantity(springs, 30, 1200, multiplier);
-    if (!quantity) return;
-
-    while (quantity) {
-      const [cell] = extractAnyElement(springs);
-      const id = addMarker({cell, icon, type, dy: 52});
-      const proper = Names.getCulture(cells.culture[cell]);
-      const temp = convertTemperature(gauss(35, 15, 20, 100));
-      notes.push({id, name: proper + " Hot Springs", legend: `A hot springs area. Average temperature: ${temp}`});
-      quantity--;
-    }
+  function listVolcanoes({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.h[i] >= 70);
   }
 
-  function addMines(type, icon, multiplier) {
+  function addVolcano(id, cell) {
     const {cells} = pack;
 
-    let hillyBurgs = Array.from(cells.i.filter(i => !occupied[i] && cells.h[i] > 47 && cells.burg[i]));
-    let quantity = getQuantity(hillyBurgs, 1, 15, multiplier);
-    if (!quantity) return;
+    const proper = Names.getCulture(cells.culture[cell]);
+    const name = P(0.3) ? "Mount " + proper : P(0.7) ? proper + " Volcano" : proper;
+    const status = P(0.6) ? "Dormant" : P(0.4) ? "Active" : "Erupting";
+    notes.push({id, name, legend: `${status} volcano. Height: ${getFriendlyHeight(cells.p[cell])}.`});
+  }
+
+  function listHotSprings({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.h[i] > 50);
+  }
+
+  function addHotSpring(id, cell) {
+    const {cells} = pack;
+
+    const proper = Names.getCulture(cells.culture[cell]);
+    const temp = convertTemperature(gauss(35, 15, 20, 100));
+    const status = P(0.6) ? "geothermal" : P(0.4) ? "springwater" : "natural";
+    notes.push({
+      id,
+      name: proper + " Hot Springs",
+      legend: `A ${status} hot springs area. Average temperature: ${temp}.`
+    });
+  }
+
+  function listMines({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.h[i] > 47 && cells.burg[i]);
+  }
+
+  function addMine(id, cell) {
+    const {cells} = pack;
 
     const resources = {salt: 5, gold: 2, silver: 4, copper: 2, iron: 3, lead: 1, tin: 1};
-
-    while (quantity && hillyBurgs.length) {
-      const [cell] = extractAnyElement(hillyBurgs);
-      const id = addMarker({cell, icon, type, dx: 48, px: 13});
-      const resource = rw(resources);
-      const burg = pack.burgs[cells.burg[cell]];
-      const name = `${burg.name} — ${resource} mining town`;
-      const population = rn(burg.population * populationRate * urbanization);
-      const legend = `${burg.name} is a mining town of ${population} people just nearby the ${resource} mine`;
-      notes.push({id, name, legend});
-      quantity--;
-    }
+    const resource = rw(resources);
+    const burg = pack.burgs[cells.burg[cell]];
+    const name = `${burg.name} — ${resource} mining town`;
+    const population = rn(burg.population * populationRate * urbanization);
+    const legend = `${burg.name} is a mining town of ${population} people just nearby the ${resource} mine.`;
+    notes.push({id, name, legend});
   }
 
-  function addBridges(type, icon, multiplier) {
-    const {cells, burgs} = pack;
-
+  function listBridges({cells, burgs}) {
     const meanFlux = d3.mean(cells.fl.filter(fl => fl));
-    let bridges = Array.from(
-      cells.i.filter(i => !occupied[i] && cells.burg[i] && cells.t[i] !== 1 && burgs[cells.burg[i]].population > 20 && cells.r[i] && cells.fl[i] > meanFlux)
+    return cells.i.filter(
+      i =>
+        !occupied[i] &&
+        cells.burg[i] &&
+        cells.t[i] !== 1 &&
+        burgs[cells.burg[i]].population > 20 &&
+        cells.r[i] &&
+        cells.fl[i] > meanFlux
     );
-    let quantity = getQuantity(bridges, 1, 5, multiplier);
-    if (!quantity) return;
-
-    while (quantity) {
-      const [cell] = extractAnyElement(bridges);
-      const id = addMarker({cell, icon, type, px: 14});
-      const burg = pack.burgs[cells.burg[cell]];
-      const river = pack.rivers.find(r => r.i === pack.cells.r[cell]);
-      const riverName = river ? `${river.name} ${river.type}` : "river";
-      const name = river && P(0.2) ? river.name : burg.name;
-      const weightedAdjectives = {
-        stone: 10,
-        wooden: 1,
-        lengthy: 2,
-        formidable: 2,
-        rickety: 1,
-        beaten: 1,
-        weathered: 1
-      };
-      notes.push({id, name: `${name} Bridge`, legend: `A ${rw(weightedAdjectives)} bridge spans over the ${riverName} near ${burg.name}`});
-      quantity--;
-    }
   }
 
-  function addInns(type, icon, multiplier) {
+  function addBridge(id, cell) {
     const {cells} = pack;
 
-    let taverns = Array.from(cells.i.filter(i => !occupied[i] && cells.h[i] >= 20 && cells.road[i] > 4 && cells.pop[i] > 10));
-    let quantity = getQuantity(taverns, 1, 100, multiplier);
-    if (!quantity) return;
+    const burg = pack.burgs[cells.burg[cell]];
+    const river = pack.rivers.find(r => r.i === pack.cells.r[cell]);
+    const riverName = river ? `${river.name} ${river.type}` : "river";
+    const name = river && P(0.2) ? `${river.name} Bridge` : `${burg.name} Bridge`;
+    const weightedAdjectives = {
+      stone: 10,
+      wooden: 1,
+      lengthy: 2,
+      formidable: 2,
+      rickety: 1,
+      beaten: 1,
+      weathered: 1
+    };
+    const barriers = [
+      "its collapse during the flood",
+      "being rumoured to attract trolls",
+      "the drying up of local trade",
+      "banditry infested the area",
+      "the old waypoints crumbled"
+    ];
+    const legend = P(0.7)
+      ? `A ${rw(weightedAdjectives)} bridge spans over the ${riverName} near ${burg.name}.`
+      : `An old crossing of the ${riverName}, rarely used since ${ra(barriers)}.`;
 
+    notes.push({id, name, legend});
+  }
+
+  function listInns({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.h[i] >= 20 && cells.road[i] > 4 && cells.pop[i] > 10);
+  }
+
+  function addInn(id, cell) {
     const colors = [
       "Dark",
       "Light",
@@ -405,18 +455,32 @@ window.Markers = (function () {
       "rat tails",
       "pig ears"
     ];
-    const types = ["hot", "cold", "fire", "ice", "smoky", "misty", "shiny", "sweet", "bitter", "salty", "sour", "sparkling", "smelly"];
+    const types = [
+      "hot",
+      "cold",
+      "fire",
+      "ice",
+      "smoky",
+      "misty",
+      "shiny",
+      "sweet",
+      "bitter",
+      "salty",
+      "sour",
+      "sparkling",
+      "smelly"
+    ];
     const drinks = [
       "wine",
       "brandy",
-      "jinn",
+      "gin",
       "whisky",
       "rom",
       "beer",
       "cider",
       "mead",
       "liquor",
-      "spirit",
+      "spirits",
       "vodka",
       "tequila",
       "absinthe",
@@ -430,144 +494,140 @@ window.Markers = (function () {
       "sap"
     ];
 
-    while (quantity) {
-      const [cell] = extractAnyElement(taverns);
-      const id = addMarker({cell, icon, type, px: 14});
-      const typeName = P(0.3) ? "inn" : "tavern";
-      const isAnimalThemed = P(0.7);
-      const animal = ra(animals);
-      const name = isAnimalThemed ? (P(0.6) ? ra(colors) + " " + animal : ra(adjectives) + " " + animal) : ra(adjectives) + " " + capitalize(type);
-      const meal = isAnimalThemed && P(0.3) ? animal : ra(courses);
-      const course = `${ra(methods)} ${meal}`.toLowerCase();
-      const drink = `${P(0.5) ? ra(types) : ra(colors)} ${ra(drinks)}`.toLowerCase();
-      const legend = `A big and famous roadside ${typeName}. Delicious ${course} with ${drink} is served here`;
-      notes.push({id, name: "The " + name, legend});
-      quantity--;
-    }
+    const typeName = P(0.3) ? "inn" : "tavern";
+    const isAnimalThemed = P(0.7);
+    const animal = ra(animals);
+    const name = isAnimalThemed
+      ? P(0.6)
+        ? ra(colors) + " " + animal
+        : ra(adjectives) + " " + animal
+      : ra(adjectives) + " " + capitalize(typeName);
+    const meal = isAnimalThemed && P(0.3) ? animal : ra(courses);
+    const course = `${ra(methods)} ${meal}`.toLowerCase();
+    const drink = `${P(0.5) ? ra(types) : ra(colors)} ${ra(drinks)}`.toLowerCase();
+    const legend = `A big and famous roadside ${typeName}. Delicious ${course} with ${drink} is served here.`;
+    notes.push({id, name: "The " + name, legend});
   }
 
-  function addLighthouses(type, icon, multiplier) {
-    const {cells} = pack;
-
-    const lighthouses = Array.from(cells.i.filter(i => !occupied[i] && cells.harbor[i] > 6 && cells.c[i].some(c => cells.h[c] < 20 && cells.road[c])));
-    let quantity = getQuantity(lighthouses, 1, 2, multiplier);
-    if (!quantity) return;
-
-    while (quantity) {
-      const [cell] = extractAnyElement(lighthouses);
-      const id = addMarker({cell, icon, type, px: 14});
-      const proper = cells.burg[cell] ? pack.burgs[cells.burg[cell]].name : Names.getCulture(cells.culture[cell]);
-      notes.push({id, name: getAdjective(proper) + " Lighthouse" + name, legend: `A lighthouse to serve as a beacon for ships in the open sea`});
-      quantity--;
-    }
+  function listLighthouses({cells}) {
+    return cells.i.filter(
+      i => !occupied[i] && cells.harbor[i] > 6 && cells.c[i].some(c => cells.h[c] < 20 && cells.road[c])
+    );
   }
 
-  function addWaterfalls(type, icon, multiplier) {
+  function addLighthouse(id, cell) {
     const {cells} = pack;
 
-    const waterfalls = Array.from(cells.i.filter(i => cells.r[i] && !occupied[i] && cells.h[i] >= 50 && cells.c[i].some(c => cells.h[c] < 40 && cells.r[c])));
-    const quantity = getQuantity(waterfalls, 1, 5, multiplier);
-    if (!quantity) return;
+    const proper = cells.burg[cell] ? pack.burgs[cells.burg[cell]].name : Names.getCulture(cells.culture[cell]);
+    notes.push({
+      id,
+      name: getAdjective(proper) + " Lighthouse" + name,
+      legend: `A lighthouse to serve as a beacon for ships in the open sea.`
+    });
+  }
+
+  function listWaterfalls({cells}) {
+    return cells.i.filter(
+      i => cells.r[i] && !occupied[i] && cells.h[i] >= 50 && cells.c[i].some(c => cells.h[c] < 40 && cells.r[c])
+    );
+  }
+
+  function addWaterfall(id, cell) {
+    const {cells} = pack;
 
     const descriptions = [
-      "A gorgeous waterfall flows here",
-      "The rapids of an exceptionally beautiful waterfall",
-      "An impressive waterfall has cut through the land",
-      "The cascades of a stunning waterfall",
-      "A river drops down from a great height forming a wonderous waterfall",
-      "A breathtaking waterfall cuts through the landscape"
+      "A gorgeous waterfall flows here.",
+      "The rapids of an exceptionally beautiful waterfall.",
+      "An impressive waterfall has cut through the land.",
+      "The cascades of a stunning waterfall.",
+      "A river drops down from a great height forming a wonderous waterfall.",
+      "A breathtaking waterfall cuts through the landscape."
     ];
-    for (let i = 0; i < waterfalls.length && i < quantity; i++) {
-      const cell = waterfalls[i];
-      const id = addMarker({cell, icon, type, dy: 54, px: 16});
-      const proper = cells.burg[cell] ? pack.burgs[cells.burg[cell]].name : Names.getCulture(cells.culture[cell]);
-      notes.push({id, name: getAdjective(proper) + " Waterfall" + name, legend: `${ra(descriptions)}`});
-    }
+
+    const proper = cells.burg[cell] ? pack.burgs[cells.burg[cell]].name : Names.getCulture(cells.culture[cell]);
+    notes.push({id, name: getAdjective(proper) + " Waterfall" + name, legend: `${ra(descriptions)}`});
   }
 
-  function addBattlefields(type, icon, multiplier) {
+  function listBattlefields({cells}) {
+    return cells.i.filter(
+      i => !occupied[i] && cells.state[i] && cells.pop[i] > 2 && cells.h[i] < 50 && cells.h[i] > 25
+    );
+  }
+
+  function addBattlefield(id, cell) {
     const {cells, states} = pack;
 
-    let battlefields = Array.from(cells.i.filter(i => !occupied[i] && cells.state[i] && cells.pop[i] > 2 && cells.h[i] < 50 && cells.h[i] > 25));
-    let quantity = getQuantity(battlefields, 50, 700, multiplier);
-    if (!quantity) return;
-
-    while (quantity && battlefields.length) {
-      const [cell] = extractAnyElement(battlefields);
-      const id = addMarker({cell, icon, type, dy: 52});
-      const state = states[cells.state[cell]];
-      if (!state.campaigns) state.campaigns = BurgsAndStates.generateCampaign(state);
-      const campaign = ra(state.campaigns);
-      const date = generateDate(campaign.start, campaign.end);
-      const name = Names.getCulture(cells.culture[cell]) + " Battlefield";
-      const legend = `A historical battle of the ${campaign.name}. \r\nDate: ${date} ${options.era}`;
-      notes.push({id, name, legend});
-      quantity--;
-    }
+    const state = states[cells.state[cell]];
+    if (!state.campaigns) state.campaigns = BurgsAndStates.generateCampaign(state);
+    const campaign = ra(state.campaigns);
+    const date = generateDate(campaign.start, campaign.end);
+    const name = Names.getCulture(cells.culture[cell]) + " Battlefield";
+    const legend = `A historical battle of the ${campaign.name}. \r\nDate: ${date} ${options.era}.`;
+    notes.push({id, name, legend});
   }
 
-  function addDungeons(type, icon, multiplier) {
+  function listDungeons({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.pop[i] && cells.pop[i] < 3);
+  }
+
+  function addDungeon(id, cell) {
+    const dungeonSeed = `${seed}${cell}`;
+    const name = "Dungeon";
+    const legend = `<div>Undiscovered dungeon. See <a href="https://watabou.github.io/one-page-dungeon/?seed=${dungeonSeed}" target="_blank">One page dungeon</a></div><iframe src="https://watabou.github.io/one-page-dungeon/?seed=${dungeonSeed}" sandbox="allow-scripts allow-same-origin"></iframe>`;
+    notes.push({id, name, legend});
+  }
+
+  function listLakeMonsters({features}) {
+    return features
+      .filter(feature => feature.type === "lake" && feature.group === "freshwater" && !occupied[feature.firstCell])
+      .map(feature => feature.firstCell);
+  }
+
+  function addLakeMonster(id, cell) {
+    const lake = pack.features[pack.cells.f[cell]];
+
+    // Check that the feature is a lake in case the user clicked on a wrong
+    // square
+    if (lake.type !== "lake") return;
+
+    const name = `${lake.name} Monster`;
+    const length = gauss(10, 5, 5, 100);
+    const subjects = [
+      "Locals",
+      "Elders",
+      "Inscriptions",
+      "Tipplers",
+      "Legends",
+      "Whispers",
+      "Rumors",
+      "Journeying folk",
+      "Tales"
+    ];
+    const legend = `${ra(subjects)} say a relic monster of ${length} ${heightUnit.value} long inhabits ${
+      lake.name
+    } Lake. Truth or lie, folks are afraid to fish in the lake.`;
+    notes.push({id, name, legend});
+  }
+
+  function listSeaMonsters({cells, features}) {
+    return cells.i.filter(
+      i => !occupied[i] && cells.h[i] < 20 && cells.road[i] && features[cells.f[i]].type === "ocean"
+    );
+  }
+
+  function addSeaMonster(id, cell) {
+    const name = `${Names.getCultureShort(0)} Monster`;
+    const length = gauss(25, 10, 10, 100);
+    const legend = `Old sailors tell stories of a gigantic sea monster inhabiting these dangerous waters. Rumors say it can be ${length} ${heightUnit.value} long.`;
+    notes.push({id, name, legend});
+  }
+
+  function listHillMonsters({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.h[i] >= 50 && cells.pop[i]);
+  }
+
+  function addHillMonster(id, cell) {
     const {cells} = pack;
-
-    let dungeons = Array.from(cells.i.filter(i => !occupied[i] && cells.pop[i] && cells.pop[i] < 3));
-    let quantity = getQuantity(dungeons, 30, 200, multiplier);
-    if (!quantity) return;
-
-    while (quantity) {
-      const [cell] = extractAnyElement(dungeons);
-      const id = addMarker({cell, icon, type, dy: 51, px: 13});
-
-      const dungeonSeed = `${seed}${cell}`;
-      const name = "Dungeon";
-      const legend = `<div>Undiscovered dungeon. See <a href="https://watabou.github.io/one-page-dungeon/?seed=${dungeonSeed}" target="_blank">One page dungeon</a></div><iframe style="height: 33vh" src="https://watabou.github.io/one-page-dungeon/?seed=${dungeonSeed}" sandbox="allow-scripts allow-same-origin"></iframe>`;
-      notes.push({id, name, legend});
-      quantity--;
-    }
-  }
-
-  function addLakeMonsters(type, icon, multiplier) {
-    const {features} = pack;
-
-    const lakes = features.filter(feature => feature.type === "lake" && feature.group === "freshwater" && !occupied[feature.firstCell]);
-    let quantity = getQuantity(lakes, 2, 10, multiplier);
-    if (!quantity) return;
-
-    while (quantity) {
-      const [lake] = extractAnyElement(lakes);
-      const cell = lake.firstCell;
-      const id = addMarker({cell, icon, type, dy: 48});
-      const name = `${lake.name} Monster`;
-      const length = gauss(10, 5, 5, 100);
-      const legend = `Rumors say a relic monster of ${length} ${heightUnit.value} long inhabits ${lake.name} Lake. Truth or lie, folks are afraid to fish in the lake`;
-      notes.push({id, name, legend});
-      quantity--;
-    }
-  }
-
-  function addSeaMonsters(type, icon, multiplier) {
-    const {cells, features} = pack;
-
-    const sea = Array.from(cells.i.filter(i => !occupied[i] && cells.h[i] < 20 && cells.road[i] && features[cells.f[i]].type === "ocean"));
-    let quantity = getQuantity(sea, 50, 700, multiplier);
-    if (!quantity) return;
-
-    while (quantity) {
-      const [cell] = extractAnyElement(sea);
-      const id = addMarker({cell, icon, type});
-      const name = `${Names.getCultureShort(0)} Monster`;
-      const length = gauss(25, 10, 10, 100);
-      const legend = `Old sailors tell stories of a gigantic sea monster inhabiting these dangerous waters. Rumors say it can be ${length} ${heightUnit.value} long`;
-      notes.push({id, name, legend});
-      quantity--;
-    }
-  }
-
-  function addHillMonsters(type, icon, multiplier) {
-    const {cells} = pack;
-
-    const hills = Array.from(cells.i.filter(i => !occupied[i] && cells.h[i] >= 50 && cells.pop[i]));
-    let quantity = getQuantity(hills, 30, 600, multiplier);
-    if (!quantity) return;
 
     const adjectives = [
       "great",
@@ -586,7 +646,17 @@ window.Markers = (function () {
       "horrifying",
       "feared"
     ];
-    const subjects = ["Locals", "Elders", "Inscriptions", "Tipplers", "Legends", "Whispers", "Rumors", "Journeying folk", "Tales"];
+    const subjects = [
+      "Locals",
+      "Elders",
+      "Inscriptions",
+      "Tipplers",
+      "Legends",
+      "Whispers",
+      "Rumors",
+      "Journeying folk",
+      "Tales"
+    ];
     const species = [
       "Ogre",
       "Troll",
@@ -608,7 +678,7 @@ window.Markers = (function () {
     const modusOperandi = [
       "steals cattle at night",
       "prefers eating children",
-      "doesn't mind of human flesh",
+      "doesn't mind human flesh",
       "keeps the region at bay",
       "eats kids whole",
       "abducts young women",
@@ -619,99 +689,98 @@ window.Markers = (function () {
       "attacks unsuspecting victims"
     ];
 
-    while (quantity) {
-      const [cell] = extractAnyElement(hills);
-      const id = addMarker({cell, icon, type, dy: 54, px: 13});
-      const monster = ra(species);
-      const toponym = Names.getCulture(cells.culture[cell]);
-      const name = `${toponym} ${monster}`;
-      const legend = `${ra(subjects)} speak of a ${ra(adjectives)} ${monster} who inhabits ${toponym} hills and ${ra(modusOperandi)}`;
-      notes.push({id, name, legend});
-      quantity--;
-    }
+    const monster = ra(species);
+    const toponym = Names.getCulture(cells.culture[cell]);
+    const name = `${toponym} ${monster}`;
+    const legend = `${ra(subjects)} speak of a ${ra(adjectives)} ${monster} who inhabits ${toponym} hills and ${ra(
+      modusOperandi
+    )}.`;
+    notes.push({id, name, legend});
   }
 
-  function addSacredMountains(type, icon, multiplier) {
-    const {cells, cultures} = pack;
-
-    let lonelyMountains = Array.from(
-      cells.i.filter(i => !occupied[i] && cells.h[i] >= 70 && cells.c[i].some(c => cells.culture[c]) && cells.c[i].every(c => cells.h[c] < 60))
+  // Sacred mountains spawn on lonely mountains
+  function listSacredMountains({cells}) {
+    return cells.i.filter(
+      i =>
+        !occupied[i] &&
+        cells.h[i] >= 70 &&
+        cells.c[i].some(c => cells.culture[c]) &&
+        cells.c[i].every(c => cells.h[c] < 60)
     );
-    let quantity = getQuantity(lonelyMountains, 1, 5, multiplier);
-    if (!quantity) return;
-
-    while (quantity) {
-      const [cell] = extractAnyElement(lonelyMountains);
-      const id = addMarker({cell, icon, type, dy: 48});
-      const culture = cells.c[cell].map(c => cells.culture[c]).find(c => c);
-      const name = `${Names.getCulture(culture)} Mountain`;
-      const height = getFriendlyHeight(cells.p[cell]);
-      const legend = `A sacred mountain of ${cultures[culture].name} culture. Height: ${height}`;
-      notes.push({id, name, legend});
-      quantity--;
-    }
   }
 
-  function addSacredForests(type, icon, multiplier) {
-    const {cells, cultures} = pack;
+  function addSacredMountain(id, cell) {
+    const {cells, religions} = pack;
 
-    let temperateForests = Array.from(cells.i.filter(i => !occupied[i] && cells.culture[i] && [6, 8].includes(cells.biome[i])));
-    let quantity = getQuantity(temperateForests, 30, 1000, multiplier);
-    if (!quantity) return;
-
-    while (quantity) {
-      const [cell] = extractAnyElement(temperateForests);
-      const id = addMarker({cell, icon, type});
-      const culture = cells.culture[cell];
-      const name = `${Names.getCulture(culture)} Forest`;
-      const legend = `A sacred forest of ${cultures[culture].name} culture`;
-      notes.push({id, name, legend});
-      quantity--;
-    }
+    const culture = cells.c[cell].map(c => cells.culture[c]).find(c => c);
+    const religion = cells.religion[cell];
+    const name = `${Names.getCulture(culture)} Mountain`;
+    const height = getFriendlyHeight(cells.p[cell]);
+    const legend = `A sacred mountain of ${religions[religion].name}. Height: ${height}.`;
+    notes.push({id, name, legend});
   }
 
-  function addSacredPineries(type, icon, multiplier) {
-    const {cells, cultures} = pack;
-
-    let borealForests = Array.from(cells.i.filter(i => !occupied[i] && cells.culture[i] && cells.biome[i] === 9));
-    let quantity = getQuantity(borealForests, 30, 800, multiplier);
-    if (!quantity) return;
-
-    while (quantity) {
-      const [cell] = extractAnyElement(borealForests);
-      const id = addMarker({cell, icon, type, px: 13});
-      const culture = cells.culture[cell];
-      const name = `${Names.getCulture(culture)} Pinery`;
-      const legend = `A sacred pinery of ${cultures[culture].name} culture`;
-      notes.push({id, name, legend});
-      quantity--;
-    }
+  // Sacred forests spawn on temperate forests
+  function listSacredForests({cells}) {
+    return cells.i.filter(
+      i => !occupied[i] && cells.culture[i] && cells.religion[i] && [6, 8].includes(cells.biome[i])
+    );
   }
 
-  function addSacredPalmGroves(type, icon, multiplier) {
-    const {cells, cultures} = pack;
+  function addSacredForest(id, cell) {
+    const {cells, cultures, religions} = pack;
 
-    let oasises = Array.from(cells.i.filter(i => !occupied[i] && cells.culture[i] && cells.biome[i] === 1 && cells.pop[i] > 1 && cells.road[i]));
-    let quantity = getQuantity(oasises, 1, 100, multiplier);
-    if (!quantity) return;
-
-    while (quantity) {
-      const [cell] = extractAnyElement(oasises);
-      const id = addMarker({cell, icon, type, px: 13});
-      const culture = cells.culture[cell];
-      const name = `${Names.getCulture(culture)} Palm Grove`;
-      const legend = `A sacred palm grove of ${cultures[culture].name} culture`;
-      notes.push({id, name, legend});
-      quantity--;
-    }
+    const culture = cells.culture[cell];
+    const religion = cells.religion[cell];
+    const name = `${Names.getCulture(culture)} Forest`;
+    const legend = `A forest sacred to local ${religions[religion].name}.`;
+    notes.push({id, name, legend});
   }
 
-  function addBrigands(type, icon, multiplier) {
+  // Sacred pineries spawn on boreal forests
+  function listSacredPineries({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.culture[i] && cells.religion[i] && cells.biome[i] === 9);
+  }
+
+  function addSacredPinery(id, cell) {
+    const {cells, cultures, religions} = pack;
+
+    const culture = cells.culture[cell];
+    const religion = cells.religion[cell];
+    const name = `${Names.getCulture(culture)} Pinery`;
+    const legend = `A pinery sacred to local ${religions[religion].name}.`;
+    notes.push({id, name, legend});
+  }
+
+  // Sacred palm groves spawn on oasises
+  function listSacredPalmGroves({cells}) {
+    return cells.i.filter(
+      i =>
+        !occupied[i] &&
+        cells.culture[i] &&
+        cells.religion[i] &&
+        cells.biome[i] === 1 &&
+        cells.pop[i] > 1 &&
+        cells.road[i]
+    );
+  }
+
+  function addSacredPalmGrove(id, cell) {
+    const {cells, cultures, religions} = pack;
+
+    const culture = cells.culture[cell];
+    const religion = cells.religion[cell];
+    const name = `${Names.getCulture(culture)} Palm Grove`;
+    const legend = `A palm grove sacred to local ${religions[religion].name}.`;
+    notes.push({id, name, legend});
+  }
+
+  function listBrigands({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.culture[i] && cells.road[i] > 4);
+  }
+
+  function addBrigands(id, cell) {
     const {cells} = pack;
-
-    let roads = Array.from(cells.i.filter(i => !occupied[i] && cells.culture[i] && cells.road[i] > 4));
-    let quantity = getQuantity(roads, 50, 100, multiplier);
-    if (!quantity) return;
 
     const animals = [
       "Apes",
@@ -747,55 +816,58 @@ window.Markers = (function () {
     ];
     const types = {brigands: 4, bandits: 3, robbers: 1, highwaymen: 1};
 
-    while (quantity) {
-      const [cell] = extractAnyElement(roads);
-      const id = addMarker({cell, icon, type, px: 13});
-      const culture = cells.culture[cell];
-      const biome = cells.biome[cell];
-      const height = cells.p[cell];
-      const locality =
-        height >= 70
-          ? "highlander"
-          : [1, 2].includes(biome)
-          ? "desert"
-          : [3, 4].includes(biome)
-          ? "mounted"
-          : [5, 6, 7, 8, 9].includes(biome)
-          ? "forest"
-          : biome === 12
-          ? "swamp"
-          : "angry";
-      const name = `${Names.getCulture(culture)} ${ra(animals)}`;
-      const legend = `A gang of ${locality} ${rw(types)}`;
-      notes.push({id, name, legend});
-      quantity--;
-    }
+    const culture = cells.culture[cell];
+    const biome = cells.biome[cell];
+    const height = cells.p[cell];
+    const locality =
+      height >= 70
+        ? "highlander"
+        : [1, 2].includes(biome)
+        ? "desert"
+        : [3, 4].includes(biome)
+        ? "mounted"
+        : [5, 6, 7, 8, 9].includes(biome)
+        ? "forest"
+        : biome === 12
+        ? "swamp"
+        : "angry";
+    const name = `${Names.getCulture(culture)} ${ra(animals)}`;
+    const legend = `A gang of ${locality} ${rw(types)}.`;
+    notes.push({id, name, legend});
   }
 
-  function addPirates(type, icon, multiplier) {
-    const {cells} = pack;
-
-    let searoutes = Array.from(cells.i.filter(i => !occupied[i] && cells.h[i] < 20 && cells.road[i]));
-    let quantity = getQuantity(searoutes, 40, 300, multiplier);
-    if (!quantity) return;
-
-    while (quantity) {
-      const [cell] = extractAnyElement(searoutes);
-      const id = addMarker({cell, icon, type, dx: 51});
-      const name = `Pirates`;
-      const legend = `Pirate ships have been spotted in these waters`;
-      notes.push({id, name, legend});
-      quantity--;
-    }
+  // Pirates spawn on sea routes
+  function listPirates({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.h[i] < 20 && cells.road[i]);
   }
 
-  function addStatues(type, icon, multiplier) {
-    const {cells} = pack;
-    let statues = Array.from(cells.i.filter(i => !occupied[i] && cells.h[i] >= 20 && cells.h[i] < 40));
-    let quantity = getQuantity(statues, 80, 1200, multiplier);
-    if (!quantity) return;
+  function addPirates(id, cell) {
+    const name = `Pirates`;
+    const legend = `Pirate ships have been spotted in these waters.`;
+    notes.push({id, name, legend});
+  }
 
-    const variants = ["Statue", "Obelisk", "Monument", "Column", "Monolith", "Pillar", "Megalith", "Stele", "Runestone", "Sculpture", "Effigy", "Idol"];
+  function listStatues({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.h[i] >= 20 && cells.h[i] < 40);
+  }
+
+  function addStatue(id, cell) {
+    const {cells} = pack;
+
+    const variants = [
+      "Statue",
+      "Obelisk",
+      "Monument",
+      "Column",
+      "Monolith",
+      "Pillar",
+      "Megalith",
+      "Stele",
+      "Runestone",
+      "Sculpture",
+      "Effigy",
+      "Idol"
+    ];
     const scripts = {
       cypriot: "𐠁𐠂𐠃𐠄𐠅𐠈𐠊𐠋𐠌𐠍𐠎𐠏𐠐𐠑𐠒𐠓𐠔𐠕𐠖𐠗𐠘𐠙𐠚𐠛𐠜𐠝𐠞𐠟𐠠𐠡𐠢𐠣𐠤𐠥𐠦𐠧𐠨𐠩𐠪𐠫𐠬𐠭𐠮𐠯𐠰𐠱𐠲𐠳𐠴𐠵𐠷𐠸𐠼𐠿     ",
       geez: "ሀለሐመሠረሰቀበተኀነአከወዐዘየደገጠጰጸፀፈፐ   ",
@@ -804,31 +876,25 @@ window.Markers = (function () {
       mongolian: "᠀᠐᠑᠒ᠠᠡᠦᠧᠨᠩᠪᠭᠮᠯᠰᠱᠲᠳᠵᠻᠼᠽᠾᠿᡀᡁᡆᡍᡎᡏᡐᡑᡒᡓᡔᡕᡖᡗᡙᡜᡝᡞᡟᡠᡡᡭᡮᡯᡰᡱᡲᡳᡴᢀᢁᢂᢋᢏᢐᢑᢒᢓᢛᢜᢞᢟᢠᢡᢢᢤᢥᢦ"
     };
 
-    while (quantity) {
-      const [cell] = extractAnyElement(statues);
-      const id = addMarker({cell, icon, type});
-      const culture = cells.culture[cell];
+    const culture = cells.culture[cell];
 
-      const variant = ra(variants);
-      const name = `${Names.getCulture(culture)} ${variant}`;
-      const script = scripts[ra(Object.keys(scripts))];
-      const inscription = Array(rand(40, 100))
-        .fill(null)
-        .map(() => ra(script))
-        .join("");
-      const legend = `An ancient ${variant.toLowerCase()}. It has an inscription, but no one can translate it:
+    const variant = ra(variants);
+    const name = `${Names.getCulture(culture)} ${variant}`;
+    const script = scripts[ra(Object.keys(scripts))];
+    const inscription = Array(rand(40, 100))
+      .fill(null)
+      .map(() => ra(script))
+      .join("");
+    const legend = `An ancient ${variant.toLowerCase()}. It has an inscription, but no one can translate it:
         <div style="font-size: 1.8em; line-break: anywhere;">${inscription}</div>`;
-      notes.push({id, name, legend});
-      quantity--;
-    }
+    notes.push({id, name, legend});
   }
 
-  function addRuines(type, icon, multiplier) {
-    const {cells} = pack;
-    let ruins = Array.from(cells.i.filter(i => !occupied[i] && cells.culture[i] && cells.h[i] >= 20 && cells.h[i] < 60));
-    let quantity = getQuantity(ruins, 80, 1200, multiplier);
-    if (!quantity) return;
+  function listRuins({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.culture[i] && cells.h[i] >= 20 && cells.h[i] < 60);
+  }
 
+  function addRuins(id, cell) {
     const types = [
       "City",
       "Town",
@@ -845,37 +911,255 @@ window.Markers = (function () {
       "Castle"
     ];
 
-    while (quantity) {
-      const [cell] = extractAnyElement(ruins);
-      const id = addMarker({cell, icon, type});
-
-      const ruinType = ra(types);
-      const name = `Ruined ${ruinType}`;
-      const legend = `Ruins of an ancient ${ruinType.toLowerCase()}. Untold riches may lie within.`;
-      notes.push({id, name, legend});
-      quantity--;
-    }
+    const ruinType = ra(types);
+    const name = `Ruined ${ruinType}`;
+    const legend = `Ruins of an ancient ${ruinType.toLowerCase()}. Untold riches may lie within.`;
+    notes.push({id, name, legend});
   }
 
-  function addPortals(type, icon, multiplier) {
-    const {burgs} = pack;
-    let portals = burgs
+  function listCircuses({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.culture[i] && cells.h[i] >= 20 && pack.cells.road[i]);
+  }
+
+  function addCircuses(id, cell) {
+    const adjectives = [
+      "Fantastical",
+      "Wonderous",
+      "Incomprehensible",
+      "Magical",
+      "Extraordinary",
+      "Unmissable",
+      "World-famous",
+      "Breathtaking"
+    ];
+
+    const adjective = ra(adjectives);
+    const name = `Travelling ${adjective} Circus`;
+    const legend = `Roll up, roll up, this ${adjective.toLowerCase()} circus is here for a limited time only.`;
+    notes.push({id, name, legend});
+  }
+
+  function listJousts({cells, burgs}) {
+    return cells.i.filter(i => !occupied[i] && cells.burg[i] && burgs[cells.burg[i]].population > 20);
+  }
+
+  function addJousts(id, cell) {
+    const {cells, burgs} = pack;
+    const types = ["Joust", "Competition", "Melee", "Tournament", "Contest"];
+    const virtues = ["cunning", "might", "speed", "the greats", "acumen", "brutality"];
+
+    if (!cells.burg[cell]) return;
+    const burgName = burgs[cells.burg[cell]].name;
+    const type = ra(types);
+    const virtue = ra(virtues);
+
+    const name = `${burgName} ${type}`;
+    const legend = `Warriors from around the land gather for a ${type.toLowerCase()} of ${virtue} in ${burgName}, with fame, fortune and favour on offer to the victor.`;
+    notes.push({id, name, legend});
+  }
+
+  function listCanoes({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.r[i]);
+  }
+
+  function addCanoes(id, cell) {
+    const river = pack.rivers.find(r => r.i === pack.cells.r[cell]);
+
+    const name = `Minor Jetty`;
+    const riverName = river ? `${river.name} ${river.type}` : "river";
+    const legend = `A small location along the ${riverName} to launch boats from sits here, along with a weary looking owner, willing to sell passage along the river.`;
+    notes.push({id, name, legend});
+  }
+
+  function listMigrations({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.h[i] >= 20 && cells.pop[i] <= 2);
+  }
+
+  function addMigrations(id, cell) {
+    const animals = [
+      "Antelopes",
+      "Apes",
+      "Badgers",
+      "Bears",
+      "Beavers",
+      "Bisons",
+      "Boars",
+      "Buffalo",
+      "Cats",
+      "Cranes",
+      "Crocodiles",
+      "Crows",
+      "Deer",
+      "Dogs",
+      "Eagles",
+      "Elk",
+      "Foxes",
+      "Goats",
+      "Geese",
+      "Hares",
+      "Hawks",
+      "Herons",
+      "Horses",
+      "Hyenas",
+      "Ibises",
+      "Jackals",
+      "Jaguars",
+      "Larks",
+      "Leopards",
+      "Lions",
+      "Mantises",
+      "Martens",
+      "Mooses",
+      "Mules",
+      "Owls",
+      "Panthers",
+      "Rats",
+      "Ravens",
+      "Rooks",
+      "Scorpions",
+      "Sharks",
+      "Sheep",
+      "Snakes",
+      "Spiders",
+      "Tigers",
+      "Wolves",
+      "Wolverines",
+      "Camels",
+      "Falcons",
+      "Hounds",
+      "Oxen"
+    ];
+    const animalChoice = ra(animals);
+
+    const name = `${animalChoice} migration`;
+    const legend = `A huge group of ${animalChoice.toLowerCase()} are migrating, whether part of their annual routine, or something more extraordinary.`;
+    notes.push({id, name, legend});
+  }
+
+  function listDances({cells, burgs}) {
+    return cells.i.filter(i => !occupied[i] && cells.burg[i] && burgs[cells.burg[i]].population > 15);
+  }
+
+  function addDances(id, cell) {
+    const {cells, burgs} = pack;
+    const burgName = burgs[cells.burg[cell]].name;
+    const socialTypes = [
+      "gala",
+      "dance",
+      "performance",
+      "ball",
+      "soiree",
+      "jamboree",
+      "exhibition",
+      "carnival",
+      "festival",
+      "jubilee"
+    ];
+    const people = [
+      "great and the good",
+      "nobility",
+      "local elders",
+      "foreign dignitaries",
+      "spiritual leaders",
+      "suspected revolutionaries"
+    ];
+    const socialType = ra(socialTypes);
+
+    const name = `${burgName} ${socialType}`;
+    const legend = `A ${socialType} has been organised at ${burgName} as a chance to gather the ${ra(
+      people
+    )} of the area together to be merry, make alliances and scheme around the crisis.`;
+    notes.push({id, name, legend});
+  }
+
+  function listMirage({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.biome[i] === 1);
+  }
+
+  function addMirage(id, cell) {
+    const adjectives = ["Entrancing", "Diaphanous", "Illusory", "Distant", "Perculiar"];
+
+    const mirageAdjective = ra(adjectives);
+    const name = `${mirageAdjective} mirage`;
+    const legend = `This ${mirageAdjective.toLowerCase()} mirage has been luring travellers out of their way for eons.`;
+    notes.push({id, name, legend});
+  }
+
+  function listCaves({cells}) {
+    return cells.i.filter(i => !occupied[i] && cells.h[i] >= 50 && cells.pop[i]);
+  }
+
+  function addCaves(id, cell) {
+    const {cells} = pack;
+
+    const formations = {
+      Cave: 10,
+      Cavern: 8,
+      Chasm: 6,
+      Ravine: 6,
+      Fracture: 5,
+      Grotto: 4,
+      Pit: 4,
+      Sinkhole: 2,
+      Hole: 2
+    };
+    const status = {
+      "a good spot to hid treasure": 5,
+      "the home of strange monsters": 5,
+      "totally empty": 4,
+      "endlessly deep and unexplored": 4,
+      "completely flooded": 2,
+      "slowly filling with lava": 1
+    };
+
+    let formation = rw(formations);
+    const toponym = Names.getCulture(cells.culture[cell]);
+    if (cells.biome[cell] === 11) {
+      formation = "Glacial " + formation;
+    }
+    const name = `${toponym} ${formation}`;
+    const legend = `The ${name}. Locals claim that it is ${rw(status)}.`;
+    notes.push({id, name, legend});
+  }
+
+  function listPortals({burgs}) {
+    return burgs
       .slice(1, Math.ceil(burgs.length / 10) + 1)
       .filter(({cell}) => !occupied[cell])
-      .map(burg => [burg.name, burg.cell]);
-    let quantity = getQuantity(portals, 16, 8, multiplier);
-    if (!quantity) return;
-
-    while (quantity) {
-      const [portal] = extractAnyElement(portals);
-      const [burgName, cell] = portal;
-      const id = addMarker({cell, icon, type, px: 14});
-      const name = `${burgName} Portal`;
-      const legend = `An element of the magic portal system connecting major cities. Portals installed centuries ago, but still work fine`;
-      notes.push({id, name, legend});
-      quantity--;
-    }
+      .map(burg => burg.cell);
   }
 
-  return {generate, regenerate, getConfig, setConfig};
+  function addPortal(id, cell) {
+    const {cells, burgs} = pack;
+
+    if (!cells.burg[cell]) return;
+    const burgName = burgs[cells.burg[cell]].name;
+
+    const name = `${burgName} Portal`;
+    const legend = `An element of the magic portal system connecting major cities. The portals were installed centuries ago, but still work fine.`;
+    notes.push({id, name, legend});
+  }
+
+  function listRifts({cells}) {
+    return cells.i.filter(i => !occupied[i] && pack.cells.pop[i] <= 3 && biomesData.habitability[pack.cells.biome[i]]);
+  }
+
+  function addRifts(id, cell) {
+    const types = ["Demonic", "Interdimensional", "Abyssal", "Cosmic", "Cataclysmic", "Subterranean", "Ancient"];
+
+    const descriptions = [
+      "all known nearby beings to flee in terror",
+      "cracks in reality itself to form",
+      "swarms of foes to spill forth",
+      "nearby plants to wither and decay",
+      "an emmissary to step through with an all-powerful relic"
+    ];
+
+    const riftType = ra(types);
+    const name = `${riftType} Rift`;
+    const legend = `A rumoured ${riftType.toLowerCase()} rift in this area is causing ${ra(descriptions)}.`;
+    notes.push({id, name, legend});
+  }
+
+  return {add, generate, regenerate, getConfig, setConfig, deleteMarker};
 })();

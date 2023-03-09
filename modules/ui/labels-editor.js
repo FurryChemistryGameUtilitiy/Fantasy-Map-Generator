@@ -60,10 +60,18 @@ function editLabel() {
 
   function selectLabelGroup(text) {
     const group = text.parentNode.id;
+
+    if (group === "states" || group === "burgLabels") {
+      document.getElementById("labelGroupShow").style.display = "none";
+      return;
+    }
+
+    hideGroupSection();
     const select = document.getElementById("labelGroupSelect");
     select.options.length = 0; // remove all options
 
     labels.selectAll(":scope > g").each(function () {
+      if (this.id === "states") return;
       if (this.id === "burgLabels") return;
       select.options.add(new Option(this.id, this.id, false, this.id === group));
     });
@@ -89,7 +97,15 @@ function editLabel() {
   }
 
   function addControlPoint(point) {
-    debug.select("#controlPoints").append("circle").attr("cx", point.x).attr("cy", point.y).attr("r", 2.5).attr("stroke-width", 0.8).call(d3.drag().on("drag", dragControlPoint)).on("click", clickControlPoint);
+    debug
+      .select("#controlPoints")
+      .append("circle")
+      .attr("cx", point.x)
+      .attr("cy", point.y)
+      .attr("r", 2.5)
+      .attr("stroke-width", 0.8)
+      .call(d3.drag().on("drag", dragControlPoint))
+      .on("click", clickControlPoint);
   }
 
   function dragControlPoint() {
@@ -141,7 +157,15 @@ function editLabel() {
     }
 
     const before = ":nth-child(" + (index + 2) + ")";
-    debug.select("#controlPoints").insert("circle", before).attr("cx", point[0]).attr("cy", point[1]).attr("r", 2.5).attr("stroke-width", 0.8).call(d3.drag().on("drag", dragControlPoint)).on("click", clickControlPoint);
+    debug
+      .select("#controlPoints")
+      .insert("circle", before)
+      .attr("cx", point[0])
+      .attr("cy", point[1])
+      .attr("r", 2.5)
+      .attr("stroke-width", 0.8)
+      .call(d3.drag().on("drag", dragControlPoint))
+      .on("click", clickControlPoint);
 
     redrawLabelPath();
   }
@@ -233,9 +257,10 @@ function editLabel() {
     const group = elSelected.node().parentNode.id;
     const basic = group === "states" || group === "addedLabels";
     const count = elSelected.node().parentNode.childElementCount;
-    alertMessage.innerHTML = `Are you sure you want to remove 
-      ${basic ? "all elements in the group" : "the entire label group"}?
-      <br><br>Labels to be removed: ${count}`;
+    alertMessage.innerHTML = /* html */ `Are you sure you want to remove ${
+      basic ? "all elements in the group" : "the entire label group"
+    }? <br /><br />Labels to be
+      removed: ${count}`;
     $("#alert").dialog({
       resizable: false,
       title: "Remove route group",

@@ -2,12 +2,11 @@
 "use strict";
 
 modules.editors = true;
-restoreDefaultEvents(); // apply default viewbox events on load
 
 // restore default viewbox events
 function restoreDefaultEvents() {
   svg.call(zoom);
-  viewbox.style("cursor", "default").on(".drag", null).on("click", clicked).on("touchmove mousemove", moved);
+  viewbox.style("cursor", "default").on(".drag", null).on("click", clicked).on("touchmove mousemove", onMouseMove);
   legend.call(d3.drag().on("start", dragLegendBox));
 }
 
@@ -33,7 +32,7 @@ function clicked() {
   else if (grand.id === "coastline") editCoastline();
   else if (great.id === "armies") editRegiment();
   else if (pack.cells.t[i] === 1) {
-    const node = document.getElementById("island_" + pack.cells.f[i]);
+    const node = byId("island_" + pack.cells.f[i]);
     editCoastline(node);
   } else if (grand.id === "lakes") editLake();
 }
@@ -50,19 +49,21 @@ function unselect() {
 
 // close all dialogs except stated
 function closeDialogs(except = "#except") {
-  $(".dialog:visible")
-    .not(except)
-    .each(function () {
-      $(this).dialog("close");
-    });
+  try {
+    $(".dialog:visible")
+      .not(except)
+      .each(function () {
+        $(this).dialog("close");
+      });
+  } catch (error) {}
 }
 
 // move brush radius circle
 function moveCircle(x, y, r = 20) {
-  let circle = document.getElementById("brushCircle");
+  let circle = byId("brushCircle");
   if (!circle) {
-    const html = `<circle id="brushCircle" cx=${x} cy=${y} r=${r}></circle>`;
-    document.getElementById("debug").insertAdjacentHTML("afterBegin", html);
+    const html = /* html */ `<circle id="brushCircle" cx=${x} cy=${y} r=${r}></circle>`;
+    byId("debug").insertAdjacentHTML("afterBegin", html);
   } else {
     circle.setAttribute("cx", x);
     circle.setAttribute("cy", y);
@@ -71,7 +72,7 @@ function moveCircle(x, y, r = 20) {
 }
 
 function removeCircle() {
-  if (document.getElementById("brushCircle")) document.getElementById("brushCircle").remove();
+  if (byId("brushCircle")) byId("brushCircle").remove();
 }
 
 // get browser-defined fit-content
@@ -80,24 +81,35 @@ function fitContent() {
 }
 
 // apply sorting behaviour for lines on Editor header click
-document.querySelectorAll(".sortable").forEach(function (e) {
-  e.addEventListener("click", function (e) {
+document.querySelectorAll(".sortable").forEach(function (event) {
+  event.on("click", function () {
     sortLines(this);
   });
 });
 
-function sortLines(header) {
-  const type = header.classList.contains("alphabetically") ? "name" : "number";
-  let order = header.className.includes("-down") ? "-up" : "-down";
-  if (!header.className.includes("icon-sort") && type === "name") order = "-up";
+function applySortingByHeader(headerContainer) {
+  document
+    .getElementById(headerContainer)
+    .querySelectorAll(".sortable")
+    .forEach(function (element) {
+      element.on("click", function () {
+        sortLines(this);
+      });
+    });
+}
 
-  const headers = header.parentNode;
+function sortLines(headerElement) {
+  const type = headerElement.classList.contains("alphabetically") ? "name" : "number";
+  let order = headerElement.className.includes("-down") ? "-up" : "-down";
+  if (!headerElement.className.includes("icon-sort") && type === "name") order = "-up";
+
+  const headers = headerElement.parentNode;
   headers.querySelectorAll("div.sortable").forEach(e => {
     e.classList.forEach(c => {
       if (c.includes("icon-sort")) e.classList.remove(c);
     });
   });
-  header.classList.add("icon-sort-" + type + order);
+  headerElement.classList.add("icon-sort-" + type + order);
   applySorting(headers);
 }
 
@@ -170,7 +182,7 @@ function moveBurgToGroup(id, g) {
   const icon = document.querySelector("#burgIcons [data-id='" + id + "']");
   const anchor = document.querySelector("#anchors [data-id='" + id + "']");
   if (!label || !icon) {
-    ERROR && console.error("Cannot find label or icon elements");
+    ERROR && console.error(`Cannot find label or icon elements for id ${id}`);
     return;
   }
 
@@ -191,6 +203,25 @@ function moveBurgToGroup(id, g) {
   }
 }
 
+function moveAllBurgsToGroup(fromGroup, toGroup) {
+  const groupToMove = document.querySelector(`#burgIcons #${fromGroup}`);
+  const burgsToMove = Array.from(groupToMove.children).map(x => x.dataset.id);
+  addBurgsGroup(toGroup);
+  burgsToMove.forEach(x => moveBurgToGroup(x, toGroup));
+}
+
+function addBurgsGroup(group) {
+  if (document.querySelector(`#burgLabels > #${group}`)) return;
+  const labelCopy = document.querySelector("#burgLabels > #towns").cloneNode(false);
+  const iconCopy = document.querySelector("#burgIcons > #towns").cloneNode(false);
+  const anchorCopy = document.querySelector("#anchors > #towns").cloneNode(false);
+
+  // FIXME: using the same id is against the spec!
+  document.querySelector("#burgLabels").appendChild(labelCopy).id = group;
+  document.querySelector("#burgIcons").appendChild(iconCopy).id = group;
+  document.querySelector("#anchors").appendChild(anchorCopy).id = group;
+}
+
 function removeBurg(id) {
   const label = document.querySelector("#burgLabels [data-id='" + id + "']");
   const icon = document.querySelector("#burgIcons [data-id='" + id + "']");
@@ -206,7 +237,7 @@ function removeBurg(id) {
 
   if (burg.coa) {
     const coaId = "burgCOA" + id;
-    if (document.getElementById(coaId)) document.getElementById(coaId).remove();
+    if (byId(coaId)) byId(coaId).remove();
     emblems.select(`#burgEmblems > use[data-i='${id}']`).remove();
     delete burg.coa; // remove to save data
   }
@@ -265,41 +296,64 @@ function getBurgSeed(burg) {
 }
 
 function getMFCGlink(burg) {
+  if (burg.link) return burg.link;
+
   const {cells} = pack;
-  const {name, population, cell} = burg;
-  const burgSeed = getBurgSeed(burg);
-  const sizeRaw = 2.13 * Math.pow((population * populationRate) / urbanDensity, 0.385);
+  const {i, name, population: burgPopulation, cell} = burg;
+  const seed = getBurgSeed(burg);
+
+  const sizeRaw = 2.13 * Math.pow((burgPopulation * populationRate) / urbanDensity, 0.385);
   const size = minmax(Math.ceil(sizeRaw), 6, 100);
-  const people = rn(population * populationRate * urbanization);
+  const population = rn(burgPopulation * populationRate * urbanization);
+
+  const river = cells.r[cell] ? 1 : 0;
+  const coast = Number(burg.port > 0);
+  const sea = coast && cells.haven[cell] ? getSeaDirections(cell) : null;
+
+  const biome = cells.biome[cell];
+  const arableBiomes = river ? [1, 2, 3, 4, 5, 6, 7, 8] : [5, 6, 7, 8];
+  const farms = +arableBiomes.includes(biome);
+
+  const citadel = +burg.citadel;
+  const urban_castle = +(citadel && each(2)(i));
 
   const hub = +cells.road[cell] > 50;
-  const river = cells.r[cell] ? 1 : 0;
 
-  const coast = +burg.port;
-  const citadel = +burg.citadel;
   const walls = +burg.walls;
   const plaza = +burg.plaza;
   const temple = +burg.temple;
-  const shanty = +burg.shanty;
+  const shantytown = +burg.shanty;
 
-  const sea = coast && cells.haven[cell] ? getSeaDirections(cell) : "";
   function getSeaDirections(i) {
     const p1 = cells.p[i];
     const p2 = cells.p[cells.haven[i]];
     let deg = (Math.atan2(p2[1] - p1[1], p2[0] - p1[0]) * 180) / Math.PI - 90;
     if (deg < 0) deg += 360;
-    const norm = rn(normalize(deg, 0, 360) * 2, 2); // 0 = south, 0.5 = west, 1 = north, 1.5 = east
-    return "&sea=" + norm;
+    return rn(normalize(deg, 0, 360) * 2, 2); // 0 = south, 0.5 = west, 1 = north, 1.5 = east
   }
 
-  const baseURL = "https://watabou.github.io/city-generator/?random=0&continuous=0";
-  const url = `${baseURL}&name=${name}&population=${people}&size=${size}&seed=${burgSeed}&hub=${hub}&river=${river}&coast=${coast}&citadel=${citadel}&plaza=${plaza}&temple=${temple}&walls=${walls}&shantytown=${shanty}${sea}`;
-  return url;
-}
+  const parameters = {
+    name,
+    population,
+    size,
+    seed,
+    river,
+    coast,
+    farms,
+    citadel,
+    urban_castle,
+    hub,
+    plaza,
+    temple,
+    walls,
+    shantytown,
+    gates: -1
+  };
+  const url = new URL("https://watabou.github.io/city-generator/");
+  url.search = new URLSearchParams(parameters);
+  if (sea) url.searchParams.append("sea", sea);
 
-function toggleBurgLock(burg) {
-  const b = pack.burgs[burg];
-  b.lock = b.lock ? 0 : 1;
+  return url.toString();
 }
 
 // draw legend box
@@ -418,10 +472,15 @@ function clearLegend() {
 function createPicker() {
   const pos = () => tip("Drag to change the picker position");
   const cl = () => tip("Click to close the picker");
-  const closePicker = () => contaiter.style("display", "none");
+  const closePicker = () => container.style("display", "none");
 
-  const contaiter = d3.select("body").append("svg").attr("id", "pickerContainer").attr("width", "100%").attr("height", "100%");
-  contaiter
+  const container = d3
+    .select("body")
+    .append("svg")
+    .attr("id", "pickerContainer")
+    .attr("width", "100%")
+    .attr("height", "100%");
+  container
     .append("rect")
     .attr("x", 0)
     .attr("y", 0)
@@ -430,7 +489,7 @@ function createPicker() {
     .attr("opacity", 0.2)
     .on("mousemove", cl)
     .on("click", closePicker);
-  const picker = contaiter
+  const picker = container
     .append("g")
     .attr("id", "picker")
     .call(
@@ -470,24 +529,23 @@ function createPicker() {
     .attr("width", 303)
     .attr("height", 20)
     .on("mousemove", () => tip("Color value in different color spaces. Edit to change"));
-  const html = `
-  <label style="margin-right: 6px">HSL: 
-    <input type="number" id="pickerHSL_H" data-space="hsl" min=0 max=360 value="231">,
-    <input type="number" id="pickerHSL_S" data-space="hsl" min=0 max=100 value="70">, 
-    <input type="number" id="pickerHSL_L" data-space="hsl" min=0 max=100 value="70">
-  </label>
-  <label style="margin-right: 6px">RGB: 
-    <input type="number" id="pickerRGB_R" data-space="rgb" min=0 max=255 value="125">,
-    <input type="number" id="pickerRGB_G" data-space="rgb" min=0 max=255 value="142">, 
-    <input type="number" id="pickerRGB_B" data-space="rgb" min=0 max=255 value="232">
-  </label>
-  <label>HEX: <input type="text" id="pickerHEX" data-space="hex" style="width:42px" autocorrect="off" spellcheck="false" value="#7d8ee8"></label>`;
+  const html = /* html */ ` <label style="margin-right: 6px"
+      >HSL: <input type="number" id="pickerHSL_H" data-space="hsl" min="0" max="360" value="231" />,
+      <input type="number" id="pickerHSL_S" data-space="hsl" min="0" max="100" value="70" />,
+      <input type="number" id="pickerHSL_L" data-space="hsl" min="0" max="100" value="70" />
+    </label>
+    <label style="margin-right: 6px"
+      >RGB: <input type="number" id="pickerRGB_R" data-space="rgb" min="0" max="255" value="125" />,
+      <input type="number" id="pickerRGB_G" data-space="rgb" min="0" max="255" value="142" />,
+      <input type="number" id="pickerRGB_B" data-space="rgb" min="0" max="255" value="232" />
+    </label>
+    <label>HEX: <input type="text" id="pickerHEX" data-space="hex" style="width:42px" autocorrect="off" spellcheck="false" value="#7d8ee8" /></label>`;
   spaces.node().insertAdjacentHTML("beforeend", html);
   spaces.selectAll("input").on("change", changePickerSpace);
 
   const colors = picker.append("g").attr("id", "pickerColors").attr("stroke", "#333333");
   const hatches = picker.append("g").attr("id", "pickerHatches").attr("stroke", "#333333");
-  const hatching = d3.selectAll("g#hatching > pattern");
+  const hatching = d3.selectAll("g#defs-hatching > pattern");
   const number = hatching.size();
 
   const clr = d3.range(number).map(i => d3.hsl((i / number) * 360, 0.7, 0.7).hex());
@@ -497,8 +555,8 @@ function createPicker() {
       .attr("id", "picker_" + d)
       .attr("fill", d)
       .attr("class", i ? "" : "selected")
-      .attr("x", i * 22 + 4)
-      .attr("y", 40)
+      .attr("x", (i % 14) * 22 + 4)
+      .attr("y", 40 + Math.floor(i / 14) * 20)
       .attr("width", 16)
       .attr("height", 16);
   });
@@ -508,8 +566,8 @@ function createPicker() {
       .append("rect")
       .attr("id", "picker_" + this.id)
       .attr("fill", "url(#" + this.id + ")")
-      .attr("x", i * 22 + 4)
-      .attr("y", 61)
+      .attr("x", (i % 14) * 22 + 4)
+      .attr("y", Math.floor(i / 14) * 20 + 20 + number * 2)
       .attr("width", 16)
       .attr("height", 16);
   });
@@ -517,11 +575,13 @@ function createPicker() {
   colors
     .selectAll("rect")
     .on("click", pickerFillClicked)
-    .on("mousemove", () => tip("Click to fill with the color"));
+    .on("mouseover", () => tip("Click to fill with the color"));
   hatches
     .selectAll("rect")
     .on("click", pickerFillClicked)
-    .on("mousemove", () => tip("Click to fill with the hatching"));
+    .on("mouseover", function () {
+      tip("Click to fill with the hatching " + this.id);
+    });
 
   // append box
   const bbox = picker.node().getBBox();
@@ -537,23 +597,41 @@ function createPicker() {
     .attr("fill", "#ffffff")
     .attr("stroke", "#5d4651")
     .on("mousemove", pos);
-  picker.insert("text", ":first-child").attr("x", 291).attr("y", -10).attr("id", "pickerCloseText").text("✕");
+  picker
+    .insert("text", ":first-child")
+    .attr("x", width - 20)
+    .attr("y", -10)
+    .attr("id", "pickerCloseText")
+    .text("✕");
   picker
     .insert("rect", ":first-child")
-    .attr("x", 288)
+    .attr("x", width - 23)
     .attr("y", -21)
     .attr("id", "pickerCloseRect")
     .attr("width", 14)
     .attr("height", 14)
     .on("mousemove", cl)
     .on("click", closePicker);
-  picker.insert("text", ":first-child").attr("x", 12).attr("y", -10).attr("id", "pickerLabel").text("Color Picker").on("mousemove", pos);
-  picker.insert("rect", ":first-child").attr("x", 0).attr("y", -30).attr("width", width).attr("height", 30).attr("id", "pickerHeader").on("mousemove", pos);
+  picker
+    .insert("text", ":first-child")
+    .attr("x", 12)
+    .attr("y", -10)
+    .attr("id", "pickerLabel")
+    .text("Color Picker")
+    .on("mousemove", pos);
+  picker
+    .insert("rect", ":first-child")
+    .attr("x", 0)
+    .attr("y", -30)
+    .attr("width", width)
+    .attr("height", 30)
+    .attr("id", "pickerHeader")
+    .on("mousemove", pos);
   picker.attr("transform", `translate(${(svgWidth - width) / 2},${(svgHeight - height) / 2})`);
 }
 
 function updateSelectedRect(fill) {
-  document.getElementById("picker").querySelector("rect.selected").classList.remove("selected");
+  byId("picker").querySelector("rect.selected").classList.remove("selected");
   document
     .getElementById("picker")
     .querySelector("rect[fill='" + fill.toLowerCase() + "']")
@@ -611,7 +689,7 @@ function openPicker(fill, callback) {
   updateSelectedRect(fill);
 
   openPicker.updateFill = function () {
-    const selected = document.getElementById("picker").querySelector("rect.selected");
+    const selected = byId("picker").querySelector("rect.selected");
     if (!selected) return;
     callback(selected.getAttribute("fill"));
   };
@@ -687,7 +765,12 @@ function changePickerSpace() {
 
   const space = this.dataset.space;
   const i = Array.from(this.parentNode.querySelectorAll("input")).map(input => input.value); // inputs
-  const fill = space === "hex" ? d3.rgb(this.value) : space === "rgb" ? d3.rgb(i[0], i[1], i[2]) : d3.hsl(i[0], i[1] / 100, i[2] / 100);
+  const fill =
+    space === "hex"
+      ? d3.rgb(this.value)
+      : space === "rgb"
+      ? d3.rgb(i[0], i[1], i[2])
+      : d3.hsl(i[0], i[1] / 100, i[2] / 100);
 
   const hsl = d3.hsl(fill);
   if (isNaN(hsl.l)) {
@@ -708,7 +791,14 @@ function fog(id, path) {
   if (defs.select("#fog #" + id).size()) return;
   const fadeIn = d3.transition().duration(2000).ease(d3.easeSinInOut);
   if (defs.select("#fog path").size()) {
-    defs.select("#fog").append("path").attr("d", path).attr("id", id).attr("opacity", 0).transition(fadeIn).attr("opacity", 1);
+    defs
+      .select("#fog")
+      .append("path")
+      .attr("d", path)
+      .attr("id", id)
+      .attr("opacity", 0)
+      .transition(fadeIn)
+      .attr("opacity", 1);
   } else {
     defs.select("#fog").append("path").attr("d", path).attr("id", id).attr("opacity", 1);
     const opacity = fogging.attr("opacity");
@@ -771,9 +861,20 @@ function highlightElement(element, zoom) {
   const enter = d3.transition().duration(1000).ease(d3.easeBounceOut);
   const exit = d3.transition().duration(500).ease(d3.easeLinear);
 
-  const highlight = debug.append("rect").attr("x", box.x).attr("y", box.y).attr("width", box.width).attr("height", box.height);
+  const highlight = debug
+    .append("rect")
+    .attr("x", box.x)
+    .attr("y", box.y)
+    .attr("width", box.width)
+    .attr("height", box.height);
   highlight.classed("highlighted", 1).attr("transform", transform);
-  highlight.transition(enter).style("outline-offset", "0px").transition(exit).style("outline-color", "transparent").delay(1000).remove();
+  highlight
+    .transition(enter)
+    .style("outline-offset", "0px")
+    .transition(exit)
+    .style("outline-color", "transparent")
+    .delay(1000)
+    .remove();
 
   if (zoom) {
     const tr = parseTransform(transform);
@@ -789,8 +890,8 @@ function selectIcon(initial, callback) {
   if (!callback) return;
   $("#iconSelector").dialog();
 
-  const table = document.getElementById("iconTable");
-  const input = document.getElementById("iconInput");
+  const table = byId("iconTable");
+  const input = byId("iconInput");
   input.value = initial;
 
   if (!table.innerHTML) {
@@ -1019,6 +1120,15 @@ function selectIcon(initial, callback) {
   });
 }
 
+function getAreaUnit(squareMark = "²") {
+  return byId("areaUnit").value === "square" ? byId("distanceUnitInput").value + squareMark : byId("areaUnit").value;
+}
+
+function getArea(rawArea) {
+  const distanceScale = byId("distanceScaleInput")?.value;
+  return rawArea * distanceScale ** 2;
+}
+
 function confirmationDialog(options) {
   const {
     title = "Confirm action",
@@ -1040,25 +1150,44 @@ function confirmationDialog(options) {
     }
   };
 
-  document.getElementById("alertMessage").innerHTML = message;
+  byId("alertMessage").innerHTML = message;
   $("#alert").dialog({resizable: false, title, buttons});
 }
 
 // add and register event listeners to clean up on editor closure
 function listen(element, event, handler) {
-  element.addEventListener(event, handler);
-  return () => element.removeEventListener(event, handler);
+  element.on(event, handler);
+  return () => element.off(event, handler);
 }
 
 // Calls the refresh functionality on all editors currently open.
 function refreshAllEditors() {
   TIME && console.time("refreshAllEditors");
-  if (document.getElementById("culturesEditorRefresh").offsetParent) culturesEditorRefresh.click();
-  if (document.getElementById("biomesEditorRefresh").offsetParent) biomesEditorRefresh.click();
-  if (document.getElementById("diplomacyEditorRefresh").offsetParent) diplomacyEditorRefresh.click();
-  if (document.getElementById("provincesEditorRefresh").offsetParent) provincesEditorRefresh.click();
-  if (document.getElementById("religionsEditorRefresh").offsetParent) religionsEditorRefresh.click();
-  if (document.getElementById("statesEditorRefresh").offsetParent) statesEditorRefresh.click();
-  if (document.getElementById("zonesEditorRefresh").offsetParent) zonesEditorRefresh.click();
+  if (byId("culturesEditorRefresh")?.offsetParent) culturesEditorRefresh.click();
+  if (byId("biomesEditorRefresh")?.offsetParent) biomesEditorRefresh.click();
+  if (byId("diplomacyEditorRefresh")?.offsetParent) diplomacyEditorRefresh.click();
+  if (byId("provincesEditorRefresh")?.offsetParent) provincesEditorRefresh.click();
+  if (byId("religionsEditorRefresh")?.offsetParent) religionsEditorRefresh.click();
+  if (byId("statesEditorRefresh")?.offsetParent) statesEditorRefresh.click();
+  if (byId("zonesEditorRefresh")?.offsetParent) zonesEditorRefresh.click();
   TIME && console.timeEnd("refreshAllEditors");
+}
+
+// dynamically loaded editors
+async function editStates() {
+  if (customization) return;
+  const Editor = await import("../dynamic/editors/states-editor.js?v=1.89.05");
+  Editor.open();
+}
+
+async function editCultures() {
+  if (customization) return;
+  const Editor = await import("../dynamic/editors/cultures-editor.js?v=1.89.09");
+  Editor.open();
+}
+
+async function editReligions() {
+  if (customization) return;
+  const Editor = await import("../dynamic/editors/religions-editor.js?v=1.88.07");
+  Editor.open();
 }

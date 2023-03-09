@@ -6,7 +6,8 @@ window.Cultures = (function () {
   const generate = function () {
     TIME && console.time("generateCultures");
     cells = pack.cells;
-    cells.culture = new Uint16Array(cells.i.length); // cell cultures
+
+    const cultureIds = new Uint16Array(cells.i.length); // cell cultures
     let count = Math.min(+culturesInput.value, +culturesSet.selectedOptions[0].dataset.max);
 
     const populated = cells.i.filter(i => cells.s[i]); // populated cells
@@ -15,10 +16,12 @@ window.Cultures = (function () {
       if (!count) {
         WARN && console.warn(`There are no populated cells. Cannot generate cultures`);
         pack.cultures = [{name: "Wildlands", i: 0, base: 1, shield: "round"}];
-        alertMessage.innerHTML = `
-          The climate is harsh and people cannot live in this world.<br>
-          No cultures, states and burgs will be created.<br>
+        cells.culture = cultureIds;
+
+        alertMessage.innerHTML = /* html */ `The climate is harsh and people cannot live in this world.<br />
+          No cultures, states and burgs will be created.<br />
           Please consider changing climate settings in the World Configurator`;
+
         $("#alert").dialog({
           resizable: false,
           title: "Extreme climate warning",
@@ -31,9 +34,8 @@ window.Cultures = (function () {
         return;
       } else {
         WARN && console.warn(`Not enough populated cells (${populated.length}). Will generate only ${count} cultures`);
-        alertMessage.innerHTML = `
-          There are only ${populated.length} populated cells and it's insufficient livable area.<br>
-          Only ${count} out of ${culturesInput.value} requested cultures will be generated.<br>
+        alertMessage.innerHTML = /* html */ ` There are only ${populated.length} populated cells and it's insufficient livable area.<br />
+          Only ${count} out of ${culturesInput.value} requested cultures will be generated.<br />
           Please consider changing climate settings in the World Configurator`;
         $("#alert").dialog({
           resizable: false,
@@ -53,36 +55,58 @@ window.Cultures = (function () {
     const emblemShape = document.getElementById("emblemShape").value;
 
     const codes = [];
+
     cultures.forEach(function (c, i) {
+      const newId = i + 1;
+
+      if (c.lock) {
+        codes.push(c.code);
+        centers.add(c.center);
+
+        for (const i of cells.i) {
+          if (cells.culture[i] === c.i) cultureIds[i] = newId;
+        }
+
+        c.i = newId;
+        return;
+      }
+
       const cell = (c.center = placeCenter(c.sort ? c.sort : i => cells.s[i]));
       centers.add(cells.p[cell]);
-      c.i = i + 1;
+      c.i = newId;
       delete c.odd;
       delete c.sort;
       c.color = colors[i];
       c.type = defineCultureType(cell);
       c.expansionism = defineCultureExpansionism(c.type);
-      c.origin = 0;
+      c.origins = [0];
       c.code = abbreviate(c.name, codes);
       codes.push(c.code);
-      cells.culture[cell] = i + 1;
+      cultureIds[cell] = newId;
       if (emblemShape === "random") c.shield = getRandomShield();
     });
 
+    cells.culture = cultureIds;
+
     function placeCenter(v) {
-      let c,
-        spacing = (graphWidth + graphHeight) / 2 / count;
-      const sorted = [...populated].sort((a, b) => v(b) - v(a)),
-        max = Math.floor(sorted.length / 2);
-      do {
-        c = sorted[biased(0, max, 5)];
+      let spacing = (graphWidth + graphHeight) / 2 / count;
+      const MAX_ATTEMPTS = 100;
+
+      const sorted = [...populated].sort((a, b) => v(b) - v(a));
+      const max = Math.floor(sorted.length / 2);
+
+      let cellId = 0;
+      for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        cellId = sorted[biased(0, max, 5)];
         spacing *= 0.9;
-      } while (centers.find(cells.p[c][0], cells.p[c][1], spacing) !== undefined);
-      return c;
+        if (!cultureIds[cellId] && !centers.find(cells.p[cellId][0], cells.p[cellId][1], spacing)) break;
+      }
+
+      return cellId;
     }
 
     // the first culture with id 0 is for wildlands
-    cultures.unshift({name: "Wildlands", i: 0, base: 1, origin: null, shield: "round"});
+    cultures.unshift({name: "Wildlands", i: 0, base: 1, origins: [null], shield: "round"});
 
     // make sure all bases exist in nameBases
     if (!nameBases.length) {
@@ -92,13 +116,17 @@ window.Cultures = (function () {
 
     cultures.forEach(c => (c.base = c.base % nameBases.length));
 
-    function selectCultures(c) {
-      let def = getDefault(c);
-      if (c === def.length) return def;
-      if (def.every(d => d.odd === 1)) return def.splice(0, c);
+    function selectCultures(culturesNumber) {
+      let def = getDefault(culturesNumber);
+      if (culturesNumber === def.length) return def;
+      if (def.every(d => d.odd === 1)) return def.splice(0, culturesNumber);
 
-      const count = Math.min(c, def.length);
+      const count = Math.min(culturesNumber, def.length);
+
       const cultures = [];
+      pack.cultures?.forEach(function (culture) {
+        if (culture.lock) cultures.push(culture);
+      });
 
       for (let culture, rnd, i = 0; cultures.length < count && i < 200; i++) {
         do {
@@ -117,7 +145,11 @@ window.Cultures = (function () {
       if (cells.h[i] > 50) return "Highland"; // no penalty for hills and moutains, high for other elevations
       const f = pack.features[cells.f[cells.haven[i]]]; // opposite feature
       if (f.type === "lake" && f.cells > 5) return "Lake"; // low water cross penalty and high for growth not along coastline
-      if ((cells.harbor[i] && f.type !== "lake" && P(0.1)) || (cells.harbor[i] === 1 && P(0.6)) || (pack.features[cells.f[i]].group === "isle" && P(0.4)))
+      if (
+        (cells.harbor[i] && f.type !== "lake" && P(0.1)) ||
+        (cells.harbor[i] === 1 && P(0.6)) ||
+        (pack.features[cells.f[i]].group === "isle" && P(0.4))
+      )
         return "Naval"; // low water cross penalty and high for non-along-coastline growth
       if (cells.r[i] && cells.fl[i] > 100) return "River"; // no River cross penalty, penalty for non-River growth
       if (cells.t[i] > 2 && [3, 7, 8, 9, 10, 12].includes(cells.biome[i])) return "Hunting"; // high penalty in non-native biomes
@@ -165,7 +197,22 @@ window.Cultures = (function () {
     const emblemShape = document.getElementById("emblemShape").value;
     if (emblemShape === "random") shield = getRandomShield();
 
-    pack.cultures.push({name, color, base, center, i, expansionism: 1, type: "Generic", cells: 0, area: 0, rural: 0, urban: 0, origin: 0, code, shield});
+    pack.cultures.push({
+      name,
+      color,
+      base,
+      center,
+      i,
+      expansionism: 1,
+      type: "Generic",
+      cells: 0,
+      area: 0,
+      rural: 0,
+      urban: 0,
+      origins: [0],
+      code,
+      shield
+    });
   };
 
   const getDefault = function (count) {
@@ -182,7 +229,8 @@ window.Cultures = (function () {
       return d ? d + 1 : 1;
     }; // temperature difference fee
     const bd = (cell, biomes, fee = 4) => (biomes.includes(cells.biome[cell]) ? 1 : fee); // biome difference fee
-    const sf = (cell, fee = 4) => (cells.haven[cell] && pack.features[cells.f[cells.haven[cell]]].type !== "lake" ? 1 : fee); // not on sea coast fee
+    const sf = (cell, fee = 4) =>
+      cells.haven[cell] && pack.features[cells.f[cells.haven[cell]]].type !== "lake" ? 1 : fee; // not on sea coast fee
 
     if (culturesSet.value === "european") {
       return [
@@ -210,7 +258,13 @@ window.Cultures = (function () {
         {name: "Hantzu", base: 11, odd: 1, sort: i => n(i) / td(i, 13), shield: "banner"},
         {name: "Yamoto", base: 12, odd: 1, sort: i => n(i) / td(i, 15) / t[i], shield: "round"},
         {name: "Turchian", base: 16, odd: 1, sort: i => n(i) / td(i, 12), shield: "round"},
-        {name: "Berberan", base: 17, odd: 0.2, sort: i => (n(i) / td(i, 19) / bd(i, [1, 2, 3], 7)) * t[i], shield: "oval"},
+        {
+          name: "Berberan",
+          base: 17,
+          odd: 0.2,
+          sort: i => (n(i) / td(i, 19) / bd(i, [1, 2, 3], 7)) * t[i],
+          shield: "oval"
+        },
         {name: "Eurabic", base: 18, odd: 1, sort: i => (n(i) / td(i, 26) / bd(i, [1, 2], 7)) * t[i], shield: "oval"},
         {name: "Efratic", base: 23, odd: 0.1, sort: i => (n(i) / td(i, 22)) * t[i], shield: "round"},
         {name: "Tehrani", base: 24, odd: 1, sort: i => (n(i) / td(i, 18)) * h[i], shield: "round"},
@@ -253,7 +307,8 @@ window.Cultures = (function () {
         {name: "Scythian", base: 24, odd: 0.5, sort: i => n(i) / td(i, 11) ** 0.5 / bd(i, [4]), shield: "round"}, // Iranian
         {name: "Cantabrian", base: 20, odd: 0.5, sort: i => (n(i) / td(i, 16)) * h[i], shield: "oval"}, // Basque
         {name: "Estian", base: 9, odd: 0.2, sort: i => (n(i) / td(i, 5)) * t[i], shield: "pavise"}, // Finnic
-        {name: "Carthaginian", base: 17, odd: 0.3, sort: i => n(i) / td(i, 19) / sf(i), shield: "oval"}, // Berber
+        {name: "Carthaginian", base: 42, odd: 0.3, sort: i => n(i) / td(i, 20) / sf(i), shield: "oval"}, // Levantine
+        {name: "Hebrew", base: 42, odd: 0.2, sort: i => (n(i) / td(i, 19)) * sf(i), shield: "oval"}, // Levantine
         {name: "Mesopotamian", base: 23, odd: 0.2, sort: i => n(i) / td(i, 22) / bd(i, [1, 2, 3]), shield: "oval"} // Mesopotamian
       ];
     }
@@ -261,15 +316,45 @@ window.Cultures = (function () {
     if (culturesSet.value === "highFantasy") {
       return [
         // fantasy races
-        {name: "Quenian (Elfish)", base: 33, odd: 1, sort: i => (n(i) / bd(i, [6, 7, 8, 9], 10)) * t[i], shield: "gondor"}, // Elves
-        {name: "Eldar (Elfish)", base: 33, odd: 1, sort: i => (n(i) / bd(i, [6, 7, 8, 9], 10)) * t[i], shield: "noldor"}, // Elves
-        {name: "Trow (Dark Elfish)", base: 34, odd: 0.9, sort: i => (n(i) / bd(i, [7, 8, 9, 12], 10)) * t[i], shield: "hessen"}, // Dark Elves
-        {name: "Lothian (Dark Elfish)", base: 34, odd: 0.3, sort: i => (n(i) / bd(i, [7, 8, 9, 12], 10)) * t[i], shield: "wedged"}, // Dark Elves
+        {
+          name: "Quenian (Elfish)",
+          base: 33,
+          odd: 1,
+          sort: i => (n(i) / bd(i, [6, 7, 8, 9], 10)) * t[i],
+          shield: "gondor"
+        }, // Elves
+        {
+          name: "Eldar (Elfish)",
+          base: 33,
+          odd: 1,
+          sort: i => (n(i) / bd(i, [6, 7, 8, 9], 10)) * t[i],
+          shield: "noldor"
+        }, // Elves
+        {
+          name: "Trow (Dark Elfish)",
+          base: 34,
+          odd: 0.9,
+          sort: i => (n(i) / bd(i, [7, 8, 9, 12], 10)) * t[i],
+          shield: "hessen"
+        }, // Dark Elves
+        {
+          name: "Lothian (Dark Elfish)",
+          base: 34,
+          odd: 0.3,
+          sort: i => (n(i) / bd(i, [7, 8, 9, 12], 10)) * t[i],
+          shield: "wedged"
+        }, // Dark Elves
         {name: "Dunirr (Dwarven)", base: 35, odd: 1, sort: i => n(i) + h[i], shield: "ironHills"}, // Dwarfs
         {name: "Khazadur (Dwarven)", base: 35, odd: 1, sort: i => n(i) + h[i], shield: "erebor"}, // Dwarfs
         {name: "Kobold (Goblin)", base: 36, odd: 1, sort: i => t[i] - s[i], shield: "moriaOrc"}, // Goblin
         {name: "Uruk (Orkish)", base: 37, odd: 1, sort: i => h[i] * t[i], shield: "urukHai"}, // Orc
-        {name: "Ugluk (Orkish)", base: 37, odd: 0.5, sort: i => (h[i] * t[i]) / bd(i, [1, 2, 10, 11]), shield: "moriaOrc"}, // Orc
+        {
+          name: "Ugluk (Orkish)",
+          base: 37,
+          odd: 0.5,
+          sort: i => (h[i] * t[i]) / bd(i, [1, 2, 10, 11]),
+          shield: "moriaOrc"
+        }, // Orc
         {name: "Yotunn (Giants)", base: 38, odd: 0.7, sort: i => td(i, -10), shield: "pavise"}, // Giant
         {name: "Rake (Drakonic)", base: 39, odd: 0.7, sort: i => -s[i], shield: "fantasy2"}, // Draconic
         {name: "Arago (Arachnid)", base: 40, odd: 0.7, sort: i => t[i] - s[i], shield: "horsehead2"}, // Arachnid
@@ -278,7 +363,13 @@ window.Cultures = (function () {
         {name: "Anor (Human)", base: 32, odd: 1, sort: i => n(i) / td(i, 10), shield: "fantasy5"},
         {name: "Dail (Human)", base: 32, odd: 1, sort: i => n(i) / td(i, 13), shield: "roman"},
         {name: "Rohand (Human)", base: 16, odd: 1, sort: i => n(i) / td(i, 16), shield: "round"},
-        {name: "Dulandir (Human)", base: 31, odd: 1, sort: i => (n(i) / td(i, 5) / bd(i, [2, 4, 10], 7)) * t[i], shield: "easterling"}
+        {
+          name: "Dulandir (Human)",
+          base: 31,
+          odd: 1,
+          sort: i => (n(i) / td(i, 5) / bd(i, [2, 4, 10], 7)) * t[i],
+          shield: "easterling"
+        }
       ];
     }
 
@@ -298,18 +389,48 @@ window.Cultures = (function () {
         {name: "Hetallian", base: 3, odd: 0.3, sort: i => n(i) / td(i, 15), shield: "oval"},
         {name: "Astellian", base: 4, odd: 0.3, sort: i => n(i) / td(i, 16), shield: "spanish"},
         // rare real-world exotic
-        {name: "Kiswaili", base: 28, odd: 0.05, sort: i => n(i) / td(i, 29) / bd(i, [1, 3, 5, 7]), shield: "vesicaPiscis"},
+        {
+          name: "Kiswaili",
+          base: 28,
+          odd: 0.05,
+          sort: i => n(i) / td(i, 29) / bd(i, [1, 3, 5, 7]),
+          shield: "vesicaPiscis"
+        },
         {name: "Yoruba", base: 21, odd: 0.05, sort: i => n(i) / td(i, 15) / bd(i, [5, 7]), shield: "vesicaPiscis"},
         {name: "Koryo", base: 10, odd: 0.05, sort: i => n(i) / td(i, 12) / t[i], shield: "round"},
         {name: "Hantzu", base: 11, odd: 0.05, sort: i => n(i) / td(i, 13), shield: "banner"},
         {name: "Yamoto", base: 12, odd: 0.05, sort: i => n(i) / td(i, 15) / t[i], shield: "round"},
         {name: "Guantzu", base: 30, odd: 0.05, sort: i => n(i) / td(i, 17), shield: "banner"},
-        {name: "Ulus", base: 31, odd: 0.05, sort: i => (n(i) / td(i, 5) / bd(i, [2, 4, 10], 7)) * t[i], shield: "banner"},
+        {
+          name: "Ulus",
+          base: 31,
+          odd: 0.05,
+          sort: i => (n(i) / td(i, 5) / bd(i, [2, 4, 10], 7)) * t[i],
+          shield: "banner"
+        },
         {name: "Turan", base: 16, odd: 0.05, sort: i => n(i) / td(i, 12), shield: "round"},
-        {name: "Berberan", base: 17, odd: 0.05, sort: i => (n(i) / td(i, 19) / bd(i, [1, 2, 3], 7)) * t[i], shield: "round"},
-        {name: "Eurabic", base: 18, odd: 0.05, sort: i => (n(i) / td(i, 26) / bd(i, [1, 2], 7)) * t[i], shield: "round"},
+        {
+          name: "Berberan",
+          base: 17,
+          odd: 0.05,
+          sort: i => (n(i) / td(i, 19) / bd(i, [1, 2, 3], 7)) * t[i],
+          shield: "round"
+        },
+        {
+          name: "Eurabic",
+          base: 18,
+          odd: 0.05,
+          sort: i => (n(i) / td(i, 26) / bd(i, [1, 2], 7)) * t[i],
+          shield: "round"
+        },
         {name: "Slovan", base: 5, odd: 0.05, sort: i => (n(i) / td(i, 6)) * t[i], shield: "round"},
-        {name: "Keltan", base: 22, odd: 0.1, sort: i => n(i) / td(i, 11) ** 0.5 / bd(i, [6, 8]), shield: "vesicaPiscis"},
+        {
+          name: "Keltan",
+          base: 22,
+          odd: 0.1,
+          sort: i => n(i) / td(i, 11) ** 0.5 / bd(i, [6, 8]),
+          shield: "vesicaPiscis"
+        },
         {name: "Elladan", base: 7, odd: 0.2, sort: i => (n(i) / td(i, 18) / sf(i)) * h[i], shield: "boeotian"},
         {name: "Romian", base: 8, odd: 0.2, sort: i => n(i) / td(i, 14) / t[i], shield: "roman"},
         // fantasy races
@@ -352,12 +473,24 @@ window.Cultures = (function () {
       {name: "Nawatli", base: 14, odd: 0.1, sort: i => h[i] / td(i, 18) / bd(i, [7]), shield: "square"},
       {name: "Vengrian", base: 15, odd: 0.2, sort: i => (n(i) / td(i, 11) / bd(i, [4])) * t[i], shield: "wedged"},
       {name: "Turchian", base: 16, odd: 0.2, sort: i => n(i) / td(i, 13), shield: "round"},
-      {name: "Berberan", base: 17, odd: 0.1, sort: i => (n(i) / td(i, 19) / bd(i, [1, 2, 3], 7)) * t[i], shield: "round"},
+      {
+        name: "Berberan",
+        base: 17,
+        odd: 0.1,
+        sort: i => (n(i) / td(i, 19) / bd(i, [1, 2, 3], 7)) * t[i],
+        shield: "round"
+      },
       {name: "Eurabic", base: 18, odd: 0.2, sort: i => (n(i) / td(i, 26) / bd(i, [1, 2], 7)) * t[i], shield: "round"},
       {name: "Inuk", base: 19, odd: 0.05, sort: i => td(i, -1) / bd(i, [10, 11]) / sf(i), shield: "square"},
       {name: "Euskati", base: 20, odd: 0.05, sort: i => (n(i) / td(i, 15)) * h[i], shield: "spanish"},
       {name: "Yoruba", base: 21, odd: 0.05, sort: i => n(i) / td(i, 15) / bd(i, [5, 7]), shield: "vesicaPiscis"},
-      {name: "Keltan", base: 22, odd: 0.05, sort: i => (n(i) / td(i, 11) / bd(i, [6, 8])) * t[i], shield: "vesicaPiscis"},
+      {
+        name: "Keltan",
+        base: 22,
+        odd: 0.05,
+        sort: i => (n(i) / td(i, 11) / bd(i, [6, 8])) * t[i],
+        shield: "vesicaPiscis"
+      },
       {name: "Efratic", base: 23, odd: 0.05, sort: i => (n(i) / td(i, 22)) * t[i], shield: "diamond"},
       {name: "Tehrani", base: 24, odd: 0.1, sort: i => (n(i) / td(i, 18)) * h[i], shield: "round"},
       {name: "Maui", base: 25, odd: 0.05, sort: i => n(i) / td(i, 24) / sf(i) / t[i], shield: "round"},
@@ -366,37 +499,50 @@ window.Cultures = (function () {
       {name: "Kiswaili", base: 28, odd: 0.1, sort: i => n(i) / td(i, 29) / bd(i, [1, 3, 5, 7]), shield: "vesicaPiscis"},
       {name: "Vietic", base: 29, odd: 0.1, sort: i => n(i) / td(i, 25) / bd(i, [7], 7) / t[i], shield: "banner"},
       {name: "Guantzu", base: 30, odd: 0.1, sort: i => n(i) / td(i, 17), shield: "banner"},
-      {name: "Ulus", base: 31, odd: 0.1, sort: i => (n(i) / td(i, 5) / bd(i, [2, 4, 10], 7)) * t[i], shield: "banner"}
+      {name: "Ulus", base: 31, odd: 0.1, sort: i => (n(i) / td(i, 5) / bd(i, [2, 4, 10], 7)) * t[i], shield: "banner"},
+      {name: "Hebrew", base: 42, odd: 0.2, sort: i => (n(i) / td(i, 18)) * sf(i), shield: "oval"} // Levantine
     ];
   };
 
   // expand cultures across the map (Dijkstra-like algorithm)
   const expand = function () {
     TIME && console.time("expandCultures");
-    cells = pack.cells;
+    const {cells, cultures} = pack;
 
     const queue = new PriorityQueue({comparator: (a, b) => a.p - b.p});
-    pack.cultures.forEach(function (c) {
-      if (!c.i || c.removed) return;
-      queue.queue({e: c.center, p: 0, c: c.i});
-    });
-
-    const neutral = (cells.i.length / 5000) * 3000 * neutralInput.value; // limit cost for culture growth
     const cost = [];
+
+    const neutralRate = byId("neutralRate")?.valueAsNumber || 1;
+    const neutral = cells.i.length * 0.6 * neutralRate; // limit cost for culture growth
+
+    // remove culture from all cells except of locked
+    for (const cellId of cells.i) {
+      const culture = cultures[cells.culture[cellId]];
+      if (culture.lock) continue;
+      cells.culture[cellId] = 0;
+    }
+
+    for (const culture of cultures) {
+      if (!culture.i || culture.removed) continue;
+      queue.queue({e: culture.center, p: 0, c: culture.i});
+    }
+
     while (queue.length) {
-      const next = queue.dequeue(),
-        n = next.e,
-        p = next.p,
-        c = next.c;
-      const type = pack.cultures[c].type;
-      cells.c[n].forEach(function (e) {
+      const {e, p, c} = queue.dequeue();
+      const {type} = pack.cultures[c];
+
+      cells.c[e].forEach(e => {
+        const culture = cells.culture[e];
+        if (culture?.lock) return; // do not overwrite cell of locked culture
+
         const biome = cells.biome[e];
         const biomeCost = getBiomeCost(c, biome, type);
-        const biomeChangeCost = biome === cells.biome[n] ? 0 : 20; // penalty on biome change
+        const biomeChangeCost = biome === cells.biome[e] ? 0 : 20; // penalty on biome change
         const heightCost = getHeightCost(e, cells.h[e], type);
         const riverCost = getRiverCost(cells.r[e], e, type);
         const typeCost = getTypeCost(cells.t[e], type);
-        const totalCost = p + (biomeCost + biomeChangeCost + heightCost + riverCost + typeCost) / pack.cultures[c].expansionism;
+        const totalCost =
+          p + (biomeCost + biomeChangeCost + heightCost + riverCost + typeCost) / pack.cultures[c].expansionism;
 
         if (totalCost > neutral) return;
 
